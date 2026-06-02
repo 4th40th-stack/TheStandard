@@ -46,7 +46,7 @@ export function middleware(request) {
   // Protected: /login/verify — must have come from 2fa
   if (pathname.startsWith(PROTECTED_VERIFY)) {
     const flow = request.cookies.get(FLOW_COOKIE)?.value;
-    if (flow === '2fa' || flow === 'verify') {
+    if (flow === 'login' || flow === '2fa' || flow === 'verify') {
       return NextResponse.next();
     }
     return NextResponse.redirect(new URL('/login', request.url));

