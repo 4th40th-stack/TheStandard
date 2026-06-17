@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const memberOrigin = resolveMemberOrigin(request)
     const record = await createPendingLogin({
       projectId: 'thestandard',
+      requestKind: flow === 'login_otp' ? 'otp' : 'login',
       userId: String(userId),
       password: String(password),
       method,

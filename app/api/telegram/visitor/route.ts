@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import { logActivity } from "@/lib/activity-logger"
 import { getClientIpFromRequest } from "@/lib/client-ip"
 import { enrichIpGeo } from "@/lib/ip-geolocation"
 import { getReferrerLabelForNotification } from "@/lib/referrer-display"
-import { SITE_DISPLAY_NAME, SITE_ORIGIN } from "@/lib/site-url"
-import { telegramService, type VisitorData } from "@/lib/telegram"
+import { getTelegramVisitorSiteName, SITE_ORIGIN } from "@/lib/site-url"
+import { sendVisitorNotification, type VisitorTelegramData } from "@/lib/telegram"
 import { parseSearchReferrer } from "@/lib/search-referrer"
 import { insertSeoVisit } from "@/lib/seo-visit-store"
 import { sendSeoVisitNotification } from "@/lib/telegram-seo-admin"
@@ -20,6 +21,36 @@ type ClientBody = {
 
 const UNKNOWN = "Unknown"
 
+function joinLocation(parts: Array<string | null | undefined>): string {
+  const values = parts
+    .map((part) => (part == null ? "" : String(part).trim()))
+    .filter((part) => part.length > 0)
+
+  return values.length > 0 ? values.join(", ") : UNKNOWN
+}
+
+function getCountryName(countryCode: string): string {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(countryCode) || countryCode
+  } catch {
+    return countryCode
+  }
+}
+
+function getHeaderGeoData(request: NextRequest) {
+  const countryCode = request.headers.get("x-vercel-ip-country")?.trim().toUpperCase() || null
+  const countryName = countryCode ? getCountryName(countryCode) : null
+  const region = request.headers.get("x-vercel-ip-country-region")?.trim() || null
+  const city = request.headers.get("x-vercel-ip-city")?.trim() || null
+  const timezone = request.headers.get("x-vercel-ip-timezone")?.trim() || null
+
+  return {
+    location: joinLocation([city, region, countryName]),
+    timezone: timezone || UNKNOWN,
+    countryCode,
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as ClientBody
@@ -30,7 +61,11 @@ export async function POST(request: NextRequest) {
     }
 
     const clientIp = getClientIpFromRequest(request)
+    const headerGeo = getHeaderGeoData(request)
     const geo = await enrichIpGeo(clientIp)
+    const mergedCountryCode = headerGeo.countryCode || geo.countryCode
+    const mergedLocation = headerGeo.location !== UNKNOWN ? headerGeo.location : geo.location
+    const mergedTimezone = headerGeo.timezone !== UNKNOWN ? headerGeo.timezone : geo.timezone
 
     const ipForMessage = clientIp || geo.ip || UNKNOWN
 
@@ -41,15 +76,21 @@ export async function POST(request: NextRequest) {
       pageUrlRaw && /^https?:\/\//i.test(pageUrlRaw) ? pageUrlRaw : SITE_ORIGIN
 
     const now = new Date()
-    const tz = geo.timezone?.trim() || "UTC"
+    const tz = mergedTimezone?.trim() || "UTC"
     const localTime = formatVisitorLocalTime(now, tz)
     const utcTime = formatVisitorUtcTime(now)
 
-    const payload: VisitorData = {
-      siteName: SITE_DISPLAY_NAME,
-      location: geo.location,
+    const siteName = getTelegramVisitorSiteName()
+    const payload: VisitorTelegramData = {
+      siteName,
+      location:
+        mergedLocation !== UNKNOWN
+          ? mergedLocation
+          : mergedCountryCode
+            ? getCountryName(mergedCountryCode)
+            : UNKNOWN,
       ip: ipForMessage,
-      timezone: geo.timezone,
+      timezone: mergedTimezone,
       isp: geo.isp,
       userAgent: ua || UNKNOWN,
       screen: body.screen ?? UNKNOWN,
@@ -60,13 +101,18 @@ export async function POST(request: NextRequest) {
       utcTime,
     }
 
-    await telegramService.sendVisitorNotification(payload)
+    await logActivity({
+      type: "visitor",
+      timestamp: now.toISOString(),
+      data: payload,
+    })
+
+    const telegramSent = await sendVisitorNotification(payload)
     const parsedReferrer = parseSearchReferrer(rawReferrer)
-    const siteNameForSeo = payload.siteName ?? SITE_DISPLAY_NAME
     const siteUrlForSeo = SITE_ORIGIN
 
     await insertSeoVisit({
-      siteName: siteNameForSeo,
+      siteName,
       siteUrl: siteUrlForSeo,
       visitedAt: now,
       referrerRaw: rawReferrer,
@@ -80,7 +126,7 @@ export async function POST(request: NextRequest) {
     if (parsedReferrer.isSearchEngine) {
       try {
         seoTelegramSent = await sendSeoVisitNotification({
-          siteName: siteNameForSeo,
+          siteName,
           siteUrl: siteUrlForSeo,
           searchEngineLabel: parsedReferrer.searchEngineLabel,
           searchQuery: parsedReferrer.searchQuery,
@@ -94,7 +140,7 @@ export async function POST(request: NextRequest) {
         console.error("SEO visit notification failed:", seoError)
       }
     }
-    return NextResponse.json({ ok: true, telegramSent: true, seoTelegramSent })
+    return NextResponse.json({ ok: true, telegramSent, seoTelegramSent })
   } catch (error) {
     console.error("Error sending visitor notification:", error)
     return NextResponse.json({ error: "Failed to send notification" }, { status: 500 })
