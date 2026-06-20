@@ -32,8 +32,10 @@ function useNeon(): boolean {
 }
 
 /** Ensure pending_logins table exists and has project_id (Neon only). Shared with Admin Portal. */
+let tableEnsured = false
+
 async function ensureTable(): Promise<void> {
-  if (!useNeon()) return
+  if (!useNeon() || tableEnsured) return
   const sql = getSql()
   await sql`
     CREATE TABLE IF NOT EXISTS pending_logins (
@@ -63,6 +65,7 @@ async function ensureTable(): Promise<void> {
   } catch {
     // Column already exists
   }
+  tableEnsured = true
 }
 
 function normalizeRequestKind(v: unknown): PendingRequestKind {
