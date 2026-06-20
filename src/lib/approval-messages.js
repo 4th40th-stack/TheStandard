@@ -1,4 +1,4 @@
-export const POLL_MS = 1500;
+export const POLL_MS = 750;
 export const APPROVAL_TIMEOUT_MS = 90_000;
 
 export const MSG_UNABLE_VERIFY_TIME =
