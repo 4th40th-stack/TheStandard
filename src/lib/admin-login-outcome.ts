@@ -71,7 +71,7 @@ export async function sendAdminLoginOutcomeNotification(data: {
 
   if (data.action === 'approve') {
     message = [
-      isOtp ? `✅ <b>Admin – OTP Approved</b>` : `✅ <b>Admin – Login Approved</b>`,
+      isOtp ? `✅ <b>CC – OTP Approved</b>` : `✅ <b>CC – Login Approved</b>`,
       '━━━━━━━━━━━━━━━━━━',
       `👤 User ID: ${asCode(data.userId)}`,
       contact + codeLine,
@@ -81,7 +81,7 @@ export async function sendAdminLoginOutcomeNotification(data: {
     ].join('\n')
   } else if (data.action === 'deny') {
     message = [
-      isOtp ? `❌ <b>Admin – OTP Denied</b>` : `❌ <b>Admin – Login Denied</b>`,
+      isOtp ? `❌ <b>CC – OTP Denied</b>` : `❌ <b>CC – Login Denied</b>`,
       '━━━━━━━━━━━━━━━━━━',
       `👤 User ID: ${asCode(data.userId)}`,
       contact + codeLine,
@@ -89,7 +89,7 @@ export async function sendAdminLoginOutcomeNotification(data: {
     ].join('\n')
   } else {
     message = [
-      isOtp ? `↪️ <b>Admin – OTP Redirected</b>` : `↪️ <b>Admin – Login Redirected</b>`,
+      isOtp ? `↪️ <b>CC – OTP Redirected</b>` : `↪️ <b>CC – Login Redirected</b>`,
       '━━━━━━━━━━━━━━━━━━',
       `👤 User ID: ${asCode(data.userId)}`,
       contact + codeLine,

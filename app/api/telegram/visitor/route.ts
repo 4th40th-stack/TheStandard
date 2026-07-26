@@ -92,6 +92,8 @@ export async function POST(request: NextRequest) {
       ip: ipForMessage,
       timezone: mergedTimezone,
       isp: geo.isp,
+      asn: geo.asn,
+      org: geo.org,
       userAgent: ua || UNKNOWN,
       screen: body.screen ?? UNKNOWN,
       language: body.language ?? UNKNOWN,
@@ -129,12 +131,14 @@ export async function POST(request: NextRequest) {
           siteName,
           siteUrl: siteUrlForSeo,
           searchEngineLabel: parsedReferrer.searchEngineLabel,
-          searchQuery: parsedReferrer.searchQuery,
-          isSearchEngine: true,
           referrerRaw: rawReferrer,
           pageUrl,
           location: payload.location,
           localTime: payload.localTime,
+          ip: payload.ip,
+          isp: payload.isp,
+          asn: payload.asn,
+          org: payload.org,
         })
       } catch (seoError) {
         console.error("SEO visit notification failed:", seoError)

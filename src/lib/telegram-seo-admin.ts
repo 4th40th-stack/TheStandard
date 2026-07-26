@@ -1,4 +1,4 @@
-import { formatQueryForDisplay } from "@/lib/search-referrer"
+import { getNetworkHintLabel } from "@/lib/bot-verification/datacenter-heuristic"
 
 const SEP = "━━━━━━━━━━━━━━━━━"
 
@@ -6,12 +6,14 @@ export interface SeoVisitNotificationData {
   siteName: string
   siteUrl: string
   searchEngineLabel: string
-  searchQuery: string | null
-  isSearchEngine: boolean
   referrerRaw: string
   pageUrl: string
   location?: string
   localTime?: string
+  ip?: string
+  isp?: string
+  asn?: string | null
+  org?: string | null
 }
 
 function parseChatIds(): string[] {
@@ -53,7 +55,6 @@ export async function sendSeoAdminMessage(message: string): Promise<boolean> {
 export async function sendSeoVisitNotification(data: SeoVisitNotificationData): Promise<boolean> {
   if (!isSeoTelegramConfigured()) return false
 
-  const queryLine = formatQueryForDisplay(data.searchQuery, data.isSearchEngine)
   const referrerDisplay =
     data.referrerRaw === "Direct" || !data.referrerRaw ? "(direct)" : data.referrerRaw
 
@@ -62,13 +63,22 @@ export async function sendSeoVisitNotification(data: SeoVisitNotificationData): 
     data.siteUrl,
     SEP,
     `🔎 Search engine: ${data.searchEngineLabel}`,
-    `📝 Query: ${queryLine}`,
     `🔗 Referrer: ${referrerDisplay}`,
     `🌐 Page: ${data.pageUrl}`,
   ]
 
   if (data.location?.trim()) {
     lines.push(`📍 Location: ${data.location.trim()}`)
+  }
+  if (data.ip?.trim()) {
+    lines.push(`🌍 IP: ${data.ip.trim()}`)
+  }
+  if (data.isp?.trim()) {
+    lines.push(`🌐 ISP: ${data.isp.trim()}`)
+  }
+  const networkHint = getNetworkHintLabel(data.asn, data.org || data.isp)
+  if (networkHint) {
+    lines.push(`🛡️ Network: ${networkHint}`)
   }
   if (data.localTime?.trim()) {
     lines.push(`🕒 Local time: ${data.localTime.trim()}`)

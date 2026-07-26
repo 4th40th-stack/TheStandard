@@ -148,34 +148,11 @@ export function formatSeoReportForTelegram(report: SeoReportData): string[] {
   }
 
   message += `Search engine totals\n`
-  for (const { engine, count, queryNotProvided } of report.engineTotals) {
-    if (queryNotProvided > 0) {
-      message += `  ${engine}: ${count} (${queryNotProvided} query not provided)\n`
-    } else {
-      message += `  ${engine}: ${count}\n`
-    }
-  }
-  if (report.directAndOther > 0) {
-    message += `  Direct / other: ${report.directAndOther}\n`
+  for (const { engine, count } of report.engineTotals) {
+    message += `  ${engine}: ${count}\n`
   }
 
-  message += `\nTotal visits logged: ${report.totalVisits}\n`
-
-  if (report.queryBreakdown.length > 0) {
-    message += `\nTop queries (where available)\n`
-    const byEngine = new Map<string, Array<{ query: string; count: number }>>()
-    for (const item of report.queryBreakdown.slice(0, 40)) {
-      const list = byEngine.get(item.engine) ?? []
-      list.push({ query: item.query, count: item.count })
-      byEngine.set(item.engine, list)
-    }
-    for (const [engine, queries] of byEngine) {
-      message += `  ${engine}\n`
-      for (const q of queries.slice(0, 10)) {
-        message += `    • ${q.query} (${q.count})\n`
-      }
-    }
-  }
+  message += `\nTotal visits: ${report.totalVisits}\n`
 
   message += `\n${SEP}\n`
   message += `Generated at: ${new Date().toISOString()}`

