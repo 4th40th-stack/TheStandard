@@ -8,9 +8,9 @@ export function getClientIpFromRequest(request: NextRequest): string {
   const h = request.headers
 
   const ordered = [
+    h.get("cf-connecting-ip"),
     h.get("x-vercel-forwarded-for"),
     h.get("x-forwarded-for"),
-    h.get("cf-connecting-ip"),
     h.get("true-client-ip"),
     h.get("x-real-ip"),
     h.get("fastly-client-ip"),

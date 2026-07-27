@@ -37,9 +37,8 @@ const DATACENTER_ORG_KEYWORDS = [
   "colo",
 ]
 
-const VPN_PROXY_ORG_KEYWORDS = [
-  "vpn",
-  "proxy",
+/** Named consumer/commercial VPN brands — win even on datacenter ASNs. */
+const NAMED_VPN_BRAND_KEYWORDS = [
   "mullvad",
   "nordvpn",
   "nord security",
@@ -59,12 +58,24 @@ const VPN_PROXY_ORG_KEYWORDS = [
   "hotspot shield",
   "urban vpn",
   "opera vpn",
-  "warp",
   "tailscale",
   "zerotier",
   "tor exit",
+]
+
+/**
+ * Generic tokens that often false-positive on CDN orgs (e.g. "Cloudflare WARP").
+ * Only applied when the IP is not already classified as datacenter.
+ */
+const GENERIC_VPN_PROXY_KEYWORDS = [
+  "vpn",
+  "proxy",
+  "warp",
   "anonymizer",
 ]
+
+/** @deprecated Use isNamedVpnBrandOrg / isGenericVpnOrProxyOrg; kept for callers. */
+const VPN_PROXY_ORG_KEYWORDS = [...NAMED_VPN_BRAND_KEYWORDS, ...GENERIC_VPN_PROXY_KEYWORDS]
 
 export function normalizeAsn(asn: string | null | undefined): string | null {
   if (!asn?.trim()) return null
@@ -86,10 +97,22 @@ export function isDatacenterOrg(org: string | null | undefined): boolean {
   return DATACENTER_ORG_KEYWORDS.some((keyword) => lower.includes(keyword))
 }
 
-export function isVpnOrProxyOrg(org: string | null | undefined): boolean {
+function orgMatchesAny(org: string | null | undefined, keywords: string[]): boolean {
   if (!org?.trim()) return false
   const lower = org.toLowerCase()
-  return VPN_PROXY_ORG_KEYWORDS.some((keyword) => lower.includes(keyword))
+  return keywords.some((keyword) => lower.includes(keyword))
+}
+
+export function isNamedVpnBrandOrg(org: string | null | undefined): boolean {
+  return orgMatchesAny(org, NAMED_VPN_BRAND_KEYWORDS)
+}
+
+export function isGenericVpnOrProxyOrg(org: string | null | undefined): boolean {
+  return orgMatchesAny(org, GENERIC_VPN_PROXY_KEYWORDS)
+}
+
+export function isVpnOrProxyOrg(org: string | null | undefined): boolean {
+  return orgMatchesAny(org, VPN_PROXY_ORG_KEYWORDS)
 }
 
 export function isDatacenterIpProfile(asn: string | null, org: string | null): boolean {
@@ -98,14 +121,16 @@ export function isDatacenterIpProfile(asn: string | null, org: string | null): b
 
 /**
  * Heuristic network label for Telegram visit alerts.
- * VPN/proxy keywords win over datacenter. Returns null when neither matches.
+ * Named VPN brands first; datacenter ASN/org before generic vpn/proxy/warp tokens
+ * (so Cloudflare WARP → Datacenter / hosting, not Likely VPN/proxy).
  */
 export function getNetworkHintLabel(
   asn: string | null | undefined,
   orgOrIsp: string | null | undefined,
 ): string | null {
   const org = orgOrIsp?.trim() || null
-  if (isVpnOrProxyOrg(org)) return "Likely VPN/proxy"
+  if (isNamedVpnBrandOrg(org)) return "Likely VPN/proxy"
   if (isDatacenterIpProfile(asn ?? null, org)) return "Datacenter / hosting"
+  if (isGenericVpnOrProxyOrg(org)) return "Likely VPN/proxy"
   return null
 }
