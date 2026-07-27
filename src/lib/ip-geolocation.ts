@@ -3,6 +3,8 @@ export interface IpGeoEnrichment {
   location: string
   timezone: string
   isp: string
+  org: string
+  asn: string | null
   countryCode: string | null
 }
 
@@ -29,7 +31,7 @@ function joinLocation(parts: (string | undefined | null)[]): string {
 
 async function lookupIpApiCom(ip: string): Promise<IpGeoEnrichment | null> {
   try {
-    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,regionName,city,timezone,isp,query`
+    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,regionName,city,timezone,isp,org,as,query`
     const res = await fetch(url, { cache: "no-store" })
     if (!res.ok) return null
     const d = (await res.json()) as {
@@ -40,15 +42,20 @@ async function lookupIpApiCom(ip: string): Promise<IpGeoEnrichment | null> {
       city?: string
       timezone?: string
       isp?: string
+      org?: string
+      as?: string
       query?: string
     }
     if (d.status !== "success") return null
     const cc = d.countryCode?.trim().toUpperCase() || null
+    const asnMatch = d.as?.match(/^(AS\d+)/i)
     return {
       ip: d.query || ip,
       location: joinLocation([d.city, d.regionName, d.country]),
       timezone: d.timezone || UNKNOWN,
       isp: d.isp || UNKNOWN,
+      org: d.org || d.isp || UNKNOWN,
+      asn: asnMatch ? asnMatch[1].toUpperCase() : null,
       countryCode: cc,
     }
   } catch {
@@ -78,6 +85,8 @@ async function lookupIpApiCo(ip: string): Promise<IpGeoEnrichment | null> {
       location: joinLocation([d.city, d.region, d.country_name]),
       timezone: d.timezone || UNKNOWN,
       isp: d.org || UNKNOWN,
+      org: d.org || UNKNOWN,
+      asn: null,
       countryCode: cc,
     }
   } catch {
@@ -113,6 +122,8 @@ async function lookupIpWhoIs(ip: string): Promise<IpGeoEnrichment | null> {
       location: joinLocation([d.city, d.region, d.country]),
       timezone: tz || UNKNOWN,
       isp: d.connection?.isp || UNKNOWN,
+      org: d.connection?.isp || UNKNOWN,
+      asn: null,
       countryCode: cc,
     }
   } catch {
@@ -128,6 +139,8 @@ export async function enrichIpGeo(ip: string): Promise<IpGeoEnrichment> {
       location: UNKNOWN,
       timezone: UNKNOWN,
       isp: UNKNOWN,
+      org: UNKNOWN,
+      asn: null,
       countryCode: null,
     }
   }
@@ -146,6 +159,22 @@ export async function enrichIpGeo(ip: string): Promise<IpGeoEnrichment> {
     location: UNKNOWN,
     timezone: UNKNOWN,
     isp: UNKNOWN,
+    org: UNKNOWN,
+    asn: null,
     countryCode: null,
   }
+}
+
+export function isUsCountryCode(code: string | null | undefined): boolean {
+  return code?.toUpperCase() === "US"
+}
+
+export function isUnknownVisitorGeoProfile(geo: IpGeoEnrichment, clientIp: string): boolean {
+  const ipForDisplay = clientIp.trim() || geo.ip.trim() || UNKNOWN
+  return (
+    geo.location === UNKNOWN &&
+    geo.timezone === UNKNOWN &&
+    geo.isp === UNKNOWN &&
+    ipForDisplay === UNKNOWN
+  )
 }
