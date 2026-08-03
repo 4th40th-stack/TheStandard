@@ -23,6 +23,11 @@ export interface VisitorTelegramData {
   isp: string
   asn?: string | null
   org?: string | null
+  /** Parsed OS label from UA, e.g. "iOS 17.2", "Windows 10/11". */
+  osLabel?: string
+  /** Hardware/class from UA, e.g. "iPhone", "Mac", "Windows PC". */
+  deviceLabel?: string
+
   userAgent: string
   screen: string
   language: string
@@ -103,6 +108,12 @@ function asPre(value: unknown): string {
 }
 
 export async function sendVisitorNotification(data: VisitorTelegramData): Promise<boolean> {
+  const osLine = data.osLabel
+    ? `📱 <b>OS:</b> ${asCode(data.osLabel)}\n`
+    : ''
+  const deviceLine = data.deviceLabel
+    ? `📱 <b>Device:</b> ${asCode(data.deviceLabel)}\n`
+    : ''
   const networkHint = getNetworkHintLabel(data.asn, data.org || data.isp)
   const site = escapeTelegramHtml(data.siteName)
   const message =
@@ -114,7 +125,9 @@ export async function sendVisitorNotification(data: VisitorTelegramData): Promis
     `🌐 <b>ISP:</b> ${asCode(data.isp)}\n` +
     (networkHint ? `🛡️ <b>Network:</b> ${asCode(networkHint)}\n` : '') +
     `\n` +
-    `📱 <b>Device:</b>\n${asPre(data.userAgent)}\n` +
+    osLine +
+    deviceLine +
+    `💻 <b>User Agent:</b>\n${asPre(data.userAgent)}\n` +
     `🖥️ <b>Screen:</b> ${asCode(data.screen)}\n` +
     `🌍 <b>Language:</b> ${asCode(data.language)}\n` +
     `🔗 <b>Referrer:</b> ${asUrlField(data.referrer)}\n` +

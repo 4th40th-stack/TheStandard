@@ -5,6 +5,7 @@ import { enrichIpGeo } from "@/lib/ip-geolocation"
 import { getReferrerLabelForNotification } from "@/lib/referrer-display"
 import { getTelegramVisitorSiteName, SITE_ORIGIN } from "@/lib/site-url"
 import { sendVisitorNotification, type VisitorTelegramData } from "@/lib/telegram"
+import { parseVisitorOs } from "@/lib/parse-visitor-os"
 import { parseSearchReferrer } from "@/lib/search-referrer"
 import { insertSeoVisit } from "@/lib/seo-visit-store"
 import { sendSeoVisitNotification } from "@/lib/telegram-seo-admin"
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
     const utcTime = formatVisitorUtcTime(now)
 
     const siteName = getTelegramVisitorSiteName()
+    const osInfo = parseVisitorOs(ua)
     const payload: VisitorTelegramData = {
       siteName,
       location:
@@ -94,6 +96,8 @@ export async function POST(request: NextRequest) {
       isp: geo.isp,
      asn: geo.asn,
      org: geo.org,
+      osLabel: osInfo.label,
+      deviceLabel: osInfo.device,
       userAgent: ua || UNKNOWN,
       screen: body.screen ?? UNKNOWN,
       language: body.language ?? UNKNOWN,
