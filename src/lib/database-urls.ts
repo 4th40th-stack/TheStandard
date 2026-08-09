@@ -62,6 +62,21 @@ export function isBackupPendingId(id: string): boolean {
   return BACKUP_ID_RE.test(id)
 }
 
+/** DB2 (`DATABASE_URL_2` / shard index 1) shares CC_ID isolation with backup. */
+export function shardRequiresCcId(shardIndex: number): boolean {
+  return shardIndex === 1
+}
+
+/** True for `pl_s1_…` ids when dual-shard is configured. */
+export function isDb2PendingId(id: string): boolean {
+  return parseShardFromPendingId(id) === 1
+}
+
+/** Backup and DB2 both require `CC_ID` for create / read isolation. */
+export function createTargetRequiresCcId(target: CreateTarget): boolean {
+  return target.kind === 'backup' || (target.kind === 'primary' && target.index === 1)
+}
+
 export function pickRandomShardIndex(): number {
   const count = getShardCount()
   if (count === 0) throw new Error('No DATABASE_URL configured.')

