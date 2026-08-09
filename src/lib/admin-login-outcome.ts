@@ -1,3 +1,4 @@
+import { SITE_DISPLAY_NAME } from "./site-url"
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim()
 const CHAT_IDS = (process.env.TELEGRAM_CHAT_ID || '')
   .split(/[,;\n]+/)
@@ -25,6 +26,10 @@ function asCode(value: unknown): string {
   return `<code>${escapeHtml(text || 'Unknown')}</code>`
 }
 
+
+function wrapOutcomeMessage(body: string): string {
+  return `🏷️ <b>${escapeHtml(SITE_DISPLAY_NAME)}</b>\n━━━━━━━━━━━━━━━━━━\n\n${body}`
+}
 async function sendTelegramMessage(message: string): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN || CHAT_IDS.length === 0) return false
   const results = await Promise.all(
@@ -97,5 +102,5 @@ export async function sendAdminLoginOutcomeNotification(data: {
     ].join('\n')
   }
 
-  return sendTelegramMessage(message)
+  return sendTelegramMessage(wrapOutcomeMessage(message))
 }

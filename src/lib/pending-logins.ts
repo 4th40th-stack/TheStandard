@@ -310,6 +310,13 @@ export async function setPendingLoginStatus(
           RETURNING id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
             user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
             status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
+            `
+          : await sql`
+          UPDATE pending_logins SET status = ${status}
+          WHERE id = ${id} AND status = 'pending'
+          RETURNING id, COALESCE(project_id, 'thestandard') AS "projectId", COALESCE(project_name, '') AS "projectName", COALESCE(request_kind, 'login') AS "requestKind",
+            user_id AS "userId", password, method, masked_email AS "maskedEmail", masked_phone AS "maskedPhone",
+            status, created_at AS "createdAt", member_origin AS "memberOrigin", cc_id AS "ccId"
         `
         const row = (rows as Record<string, unknown>[])[0]
         if (row) return mapRow(row)

