@@ -20,7 +20,7 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     const method = String(body.method ?? 'text').toLowerCase();
     const code = escapeHtml(String(body.code ?? '').trim()) || '—';
-    const label = METHOD_LABELS[method] || method || 'Unknown';
+    const _label = METHOD_LABELS[method] || method || 'Unknown';
 
     const message = [
       `🏷 Site: ${escapeHtml(getSiteName())}`,
