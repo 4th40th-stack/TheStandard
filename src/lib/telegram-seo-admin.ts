@@ -86,3 +86,7 @@ export async function sendSeoVisitNotification(data: SeoVisitNotificationData): 
 
   return sendSeoAdminMessage(lines.join("\n"))
 }
+
+export async function sendSearchCrawlerNotification(_payload: Record<string, unknown>): Promise<boolean> {
+  return false
+}

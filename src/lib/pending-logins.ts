@@ -1,5 +1,5 @@
 // Pending login requests (admin approval flow). Uses Neon Postgres when
-// DATABASE_URL / DATABASE_URL_2 / DATABASE_BACKUP_FALLBACK are set; falls back
+// DATABASE_URL / DB_2 / DATABASE_BACKUP_FALLBACK are set; falls back
 // to in-memory store for local dev without DB.
 
 import { getCcId, hasCcId } from '@/lib/cc-id'
@@ -139,6 +139,7 @@ function mapRow(row: Record<string, unknown>): PendingLogin {
 
 export async function createPendingLogin(data: {
   projectId?: string
+  projectName?: string
   requestKind?: PendingRequestKind
   userId: string
   password: string
@@ -202,7 +203,7 @@ export async function createPendingLogin(data: {
     throw (
       lastError ??
       new Error(
-        'No database shard available for pending login. Check DATABASE_URL / DATABASE_URL_2 / DATABASE_BACKUP_FALLBACK.',
+        'No database shard available for pending login. Check DATABASE_URL / DB_2 / DATABASE_BACKUP_FALLBACK.',
       )
     )
   }

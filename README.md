@@ -120,3 +120,16 @@ This project is for demonstration purposes.
 ## Contact
 
 For questions or support, please contact The Standard.
+
+## Changelog
+
+### 2026-08-24 — Neon stack DATABASE_URL + DB_2…DB_10
+- Replaced legacy `DATABASE_URL_2` resolver with `DB_2`…`DB_10` shared shards (`CC_ID` required)
+- Shard 0 stays `DATABASE_URL`; rename Vercel `DATABASE_URL_2` → `DB_2` if still set
+- No `DATABASE_URL_N` aliases — see `NEON_DATABASE_RULES.md`
+
+
+### 2026-08-23 — SEO/AI visit Telegram notifications
+- Wired or refreshed SEO admin visit alerts (`sendSeoVisitNotification`) for search + AI referrers (ChatGPT, Claude, Copilot, Gemini, etc.)
+- Synced `search-referrer.ts` / SEO Telegram helpers from Referral-Provider kit so AI traffic is labeled and notified
+

@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse, after } from "next/server"
 import { createPendingLogin } from '@/lib/pending-logins'
-import { SITE_DISPLAY_NAME } from "@/src/lib/site-url"
+import { SITE_DISPLAY_NAME } from "@/lib/site-url"
 import { resolveMemberOrigin } from '@/lib/member-origin'
 import { sendFormNotification } from '@/lib/telegram'
 

@@ -32,6 +32,7 @@ export const SITE_PLATFORM: SitePlatform | undefined = undefined
 export function detectSitePlatform(): SitePlatform {
   if (SITE_PLATFORM) return SITE_PLATFORM
   const host = (CANONICAL_HOST).toLowerCase()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, no-unused-vars
   const label = SITE_DISPLAY_NAME.toLowerCase()
   if (/wealthcare|aptia365|flores247|flores/i.test(host + label)) return "wealthcare"
   if (/alight|worklife|work-life|workife/i.test(host + label)) return "alight"

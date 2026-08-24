@@ -49,6 +49,14 @@ const SEARCH_ENGINE_RULES: Array<{ test: (host: string) => boolean; key: string;
   { test: (h) => h.includes("search.meta.com"), key: "meta", label: "Meta Search" },
   { test: (h) => h.includes("you.com"), key: "you", label: "You.com" },
   { test: (h) => h.includes("perplexity.ai"), key: "perplexity", label: "Perplexity" },
+  { test: (h) => h.includes("chatgpt.com") || h.includes("chat.openai.com"), key: "chatgpt", label: "ChatGPT" },
+  { test: (h) => h.includes("claude.ai") || h.includes("anthropic.com"), key: "claude", label: "Claude" },
+  { test: (h) => h.includes("copilot.microsoft.com") || h === "copilot.com", key: "copilot", label: "Copilot" },
+  { test: (h) => h.includes("gemini.google.com"), key: "gemini", label: "Gemini" },
+  { test: (h) => h.includes("meta.ai"), key: "meta_ai", label: "Meta AI" },
+  { test: (h) => h.includes("x.ai") || h.includes("grok.com"), key: "grok", label: "Grok" },
+  { test: (h) => h.includes("poe.com"), key: "poe", label: "Poe" },
+  { test: (h) => h.includes("phind.com"), key: "phind", label: "Phind" },
   { test: (h) => h.includes("msn.com"), key: "msn", label: "MSN" },
 ]
 
