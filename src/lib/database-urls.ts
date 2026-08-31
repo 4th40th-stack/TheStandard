@@ -200,3 +200,24 @@ export function getNeonProjectIdForShard(index: number): string | null {
   if (index < 0 || index >= MAX_PRIMARY_SHARDS) return null
   return process.env[neonProjectIdEnvKey(index)]?.trim() || null
 }
+
+/** Human label for a primary shard index (matches Control Center Health tab). */
+export function formatShardDisplayLabel(shardIndex: number): string {
+  if (getShardCount() <= 1) return 'Database'
+  return `DB ${shardIndex + 1}`
+}
+
+/** Label for which Neon shard a pending login row lives on. */
+export function formatPendingLoginDatabaseLabel(
+  id: string,
+  listedFromShardIndex?: number,
+): string {
+  if (isBackupPendingId(id)) return 'Backup'
+  const parsed = parseShardFromPendingId(id)
+  if (parsed !== null) return formatShardDisplayLabel(parsed)
+  if (listedFromShardIndex !== undefined) {
+    return formatShardDisplayLabel(listedFromShardIndex)
+  }
+  return formatShardDisplayLabel(0)
+}
+

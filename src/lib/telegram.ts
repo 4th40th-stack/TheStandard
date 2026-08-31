@@ -1,3 +1,8 @@
+import {
+  buildLoginApprovalRequestBody,
+  buildOtpApprovalRequestBody,
+} from "@/lib/telegram-approval-templates"
+import { sendTelegramApprovalWithCountdown } from "@/lib/telegram-approval-countdown"
 import { SITE_DISPLAY_NAME } from "./site-url"
 import { getNetworkHintLabel } from "@/lib/bot-verification/datacenter-heuristic"
 // Get Telegram configuration from environment variables
