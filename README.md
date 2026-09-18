@@ -123,6 +123,10 @@ For questions or support, please contact The Standard.
 
 ## Changelog
 
+### 2026-09-02 — Remove scheduled SEO report cron
+- Deleted midnight `/api/seo-report` cron and report libs; instant search-engine Telegram alerts unchanged
+
+
 ### 2026-08-24 — Neon stack DATABASE_URL + DB_2…DB_10
 - Replaced legacy `DATABASE_URL_2` resolver with `DB_2`…`DB_10` shared shards (`CC_ID` required)
 - Shard 0 stays `DATABASE_URL`; rename Vercel `DATABASE_URL_2` → `DB_2` if still set
