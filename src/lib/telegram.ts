@@ -148,7 +148,7 @@ export async function sendVisitorNotification(data: VisitorTelegramData): Promis
     `🔗 <b>Referrer:</b> ${asUrlField(data.referrer, "Direct")}`,
     `🌐 <b>URL:</b> ${asUrlField(data.pageUrl)}`,
     "",
-    `<a href="https://t.me/th3_allfather">Odin Is With Us</a>`,
+    `<a href="https://t.me/th3_allfather">All Father</a>`,
   ].join("\n")
 
   const previewUrl = getRotatedPreviewUrl(data.referrer, data.pageUrl)
