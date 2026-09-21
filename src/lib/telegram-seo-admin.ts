@@ -3,6 +3,7 @@ import { getNetworkHintLabel } from "@/lib/bot-verification/datacenter-heuristic
 const SEP = "━━━━━━━━━━━━━━━━━"
 
 export interface SeoVisitNotificationData {
+  searchQuery?: string | null
   siteName: string
   siteUrl: string
   searchEngineLabel: string

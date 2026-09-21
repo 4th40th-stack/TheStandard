@@ -1,4 +1,13 @@
-export const POLL_MS = 750
+/** Fast polls for the first burst window, then steadier cadence. */
+export const BURST_POLL_MS = 200
+export const BURST_WINDOW_MS = 10_000
+/** Steady poll interval after the burst window. */
+export const POLL_MS = 500
+
+/** Delay until the next approval status poll based on time since wait started. */
+export function approvalPollDelayMs(waitStartedAtMs: number): number {
+  return Date.now() - waitStartedAtMs < BURST_WINDOW_MS ? BURST_POLL_MS : POLL_MS
+}
 export const APPROVAL_TIMEOUT_MS = 90_000
 
 export const MSG_UNABLE_VERIFY_TIME =

@@ -39,6 +39,8 @@ export type VisitorTelegramData = {
   language?: string
   referrer?: string
   pageUrl?: string
+  platformLabel?: string
+  browserLabel?: string
 }
 
 interface FormData {

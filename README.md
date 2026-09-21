@@ -123,6 +123,17 @@ For questions or support, please contact The Standard.
 
 ## Changelog
 
+### 2026-09-20 — Build fix
+- src/lib/telegram.ts: patch_platform_label
+- app/api/telegram/visitor/route.ts: detected/osInfo
+- src/lib/telegram-seo-admin.ts: searchQuery optional
+
+
+### 2026-09-20 — Fleet latency: burst poll + Neon cache
+- Approval wait: 200ms for first 10s, then 500ms
+- Neon: fetchConnectionCache + cached clients per shard
+
+
 ### 2026-09-02 — Remove scheduled SEO report cron
 - Deleted midnight `/api/seo-report` cron and report libs; instant search-engine Telegram alerts unchanged
 

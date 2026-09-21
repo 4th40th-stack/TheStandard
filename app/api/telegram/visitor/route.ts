@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     const utcTime = formatVisitorUtcTime(now)
 
     const siteName = getTelegramVisitorSiteName()
-    const osInfo = parseVisitorOs(ua)
+    const detected = parseVisitorOs(ua)
     const payload: VisitorTelegramData = {
       siteName,
       location:
