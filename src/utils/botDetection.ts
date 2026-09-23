@@ -63,7 +63,7 @@ export const BOT_PATTERNS = {
         /slackbot/i,
         /discordbot/i,
         /whatsapp/i,
-        /skypeuripreview/i,
+        /skypeuripreview|meta-externalfetcher|snapchat/i,
         /telegrambot/i,
     ],
     other: [
