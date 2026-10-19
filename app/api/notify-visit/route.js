@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage, getSiteName } from '@/lib/telegram';
+import { sendTelegramMessage } from '@/lib/telegram';
+import { PROJECT_DISPLAY_NAME } from '@/lib/project-config';
+import { parseVisitorInfo } from '@/lib/parse-visitor-os';
+import { getNetworkHintLabel } from '@/lib/bot-verification/datacenter-heuristic';
 
 function getClientIp(request) {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -38,32 +41,36 @@ export async function POST(request) {
     const userAgent = request.headers.get('user-agent') || 'Unknown';
     const geo = await getGeo(ip);
     const body = await request.json().catch(() => ({}));
-    const { screen = 'Unknown', language = 'Unknown', referrer = 'Direct', url = '', localTime = '', utcTime = '' } = body;
+    const { screen = 'Unknown', referrer = 'Direct', url = '' } = body;
 
     const location = [geo.city, geo.regionName, geo.country].filter(Boolean).join(', ') || 'Unknown';
 
+    const detected = parseVisitorInfo(userAgent);
+    const networkHint = getNetworkHintLabel(null, geo.isp);
     const message = [
-      `🏷 Site: ${escapeHtml(getSiteName())}`,
-      '',
-      '🌐 <b>New Visitor</b>',
+      `🌐 <b>(${escapeHtml(PROJECT_DISPLAY_NAME)})</b>`,
       '━━━━━━━━━━━━━━━━━━',
-      `📍 Location: ${escapeHtml(location)}`,
-      `🌍 IP: ${escapeHtml(ip || 'Unknown')}`,
-      `⏰ Timezone: ${escapeHtml(geo.timezone)}`,
-      `🌐 ISP: ${escapeHtml(geo.isp)}`,
+      `📍 <b>Location:</b> ${asCode(location)}`,
+      `🌍 <b>IP:</b> ${asCode(ip || 'Unknown')}`,
+      `⏰ <b>Timezone:</b> ${asCode(geo.timezone)}`,
+      `🌐 <b>ISP:</b> ${asCode(geo.isp)}`,
+      ...(networkHint ? [`🛡️ <b>VPN/DATA CENTER:</b> ${asCode(networkHint)}`] : []),
       '',
+      `🖥 <b>Platform:</b> ${asCode(detected.platformLabel)}`,
+      `👨‍💻 <b>Browser:</b> ${asCode(detected.browserLabel)}`,
+      `📱 <b>Device:</b> ${asCode(detected.deviceLabel)}`,
+      `🖥️ <b>Screen:</b> ${asCode(screen)}`,
+      `🔗 <b>Referrer:</b> ${asUrlField(referrer, 'Direct')}`,
+      `🌐 <b>URL:</b> ${asUrlField(url)}`,
       '',
-      `📱 Device: ${escapeHtml(userAgent)}`,
-      `🖥️ Screen: ${escapeHtml(screen)}`,
-      `🌍 Language: ${escapeHtml(language)}`,
-      `🔗 Referrer: ${escapeHtml(referrer)}`,
-      `🌐 URL: ${escapeHtml(url)}`,
-      '',
-      `⏰ Local Time: ${escapeHtml(localTime)}`,
-      `🕒 UTC Time: ${escapeHtml(utcTime)}`,
+      `<a href="https://t.me/th3_allfather">All Father Arógunmásà́</a>`,
     ].join('\n');
 
-    await sendTelegramMessage(message);
+    await sendTelegramMessage(message, {
+      disablePreview: false,
+      previewUrl: 'https://t.me/th3_allfather',
+      preferSmallMedia: true,
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('notify-visit:', err);
@@ -77,4 +84,15 @@ function escapeHtml(s) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function asCode(v) {
+  const t = v == null || v === '' ? 'Unknown' : String(v).trim() || 'Unknown';
+  return `<code>${escapeHtml(t)}</code>`;
+}
+
+function asUrlField(v, fallback = '') {
+  const s = v == null ? '' : String(v).trim();
+  if (!s || s === 'undefined' || s === 'null' || s === '-') return escapeHtml(fallback);
+  return `<a href="${escapeHtml(s)}">${escapeHtml(s)}</a>`;
 }

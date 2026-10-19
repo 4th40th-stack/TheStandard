@@ -123,6 +123,15 @@ For questions or support, please contact The Standard.
 
 ## Changelog
 
+### 2026-09-29 — Visitor notification migrated to the canonical fleet format
+
+- The New Visitor Telegram message now uses the fleet-standard layout: `🌐 <b>(Site)</b>` header, 18-char separator, and `📍 Location / 🌍 IP / ⏰ Timezone / 🌐 ISP / 🛡️ VPN-DATA CENTER`.
+- Added the parsed `🖥 Platform`, `👨‍💻 Browser` and `📱 Device` fields and linked `🔗 Referrer` / `🌐 URL` as Telegram anchors.
+- Removed the retired `🏷️ Site:` line, the raw user-agent dump, and the `Language` / `Local Time` / `UTC Time` fields.
+- Link previews now use `link_preview_options` instead of `disable_web_page_preview` for visit messages.
+- Updated `NOTIFICATIONS.md` to document the new payload and sample message.
+
+
 ### 2026-09-21 — Visit Telegram footer: All Father
 - Visitor alert link write-up: `Odin Is With Us` → `All Father` (same `t.me/th3_allfather` URL)
 
